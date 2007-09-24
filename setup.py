@@ -48,7 +48,7 @@ Current Status
 Pylons %s described on this page is stable.
 
 There is also an unstable `develoment version
-<http://pylonshq.com/svn/Pylons/trunk#egg=Pylons-dev>`_ of Pylons.
+<https://www.knowledgetap.com/hg/pylons-dev/archive/tip.tar.gz#egg=Pylons-dev>`_ of Pylons.
 
 Download and Installation
 -------------------------
@@ -117,5 +117,8 @@ the `Pylons download page <http://pylonshq.com/download/>`_ .
 
     [python.templating.engines]
     pylonsmyghty = pylons.templating:MyghtyTemplatePlugin [myghty]
+    
+    [nose.plugins]
+    pylons = pylons.test:PylonsPlugin
     """,
 )
