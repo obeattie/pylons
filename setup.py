@@ -72,10 +72,10 @@ the `Pylons download page <http://pylonshq.com/download/>`_ .
     zip_safe=False,
     include_package_data=True,
     install_requires=[
-        "Routes>=1.7", "WebHelpers>=0.3.2", "Beaker>=0.8",
+        "Routes>=1.7", "WebHelpers>=0.3.2", "Beaker>=0.8.1",
         "Paste>=1.5", "PasteDeploy>=1.3.1", "PasteScript>=1.3.6",
         "FormEncode>=0.7", "simplejson>=1.7.1", "decorator>=2.1.0",
-        "nose>=0.9.3", "Mako>=0.1.8", "WebOb>=0.8.2", "WebError>=0.8dev-20071109",
+        "nose>=0.9.3", "Mako>=0.1.8", "WebOb>=0.8.4", "WebError>=0.8dev-20071109",
     ],
     dependency_links=[
         "http://www.pylonshq.com/download/"
@@ -84,6 +84,7 @@ the `Pylons download page <http://pylonshq.com/download/>`_ .
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: BSD License",
+        "Framework :: Pylons",
         "Programming Language :: Python",
         "Topic :: Internet :: WWW/HTTP",
         "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
@@ -103,6 +104,7 @@ the `Pylons download page <http://pylonshq.com/download/>`_ .
             "Pygments>=0.7", "pudge>=0.1.3",
             "buildutils>=0.1.2", "Cheetah>=1.0",
             "TurboCheetah>=0.9.5", "kid>=0.9", "TurboKid>=0.9.1",
+            "TurboJson>=1.1.1", 'Genshi>=0.4.4',
         ],
     },
     entry_points="""

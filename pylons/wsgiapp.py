@@ -55,12 +55,13 @@ class PylonsApp(object):
         package_name = config['pylons.package']
         self.helpers = config['pylons.h']
         self.globals = config['pylons.g']
+        self.environ_config = config['pylons.environ_config']
         self.package_name = package_name
         self.request_options = config['pylons.request_options']
         self.response_options = config['pylons.response_options']
         self.controller_classes = {}
         self.log_debug = False
-        self.use_webob = use_webob
+        self.use_webob = config['pylons.use_webob'] = use_webob
         
         # Create the redirect function we'll use and save it
         def redirect_to(url):
@@ -154,6 +155,8 @@ class PylonsApp(object):
         pylons_obj.h = self.helpers
         pylons_obj.buffet = self.buffet
         environ['pylons.pylons'] = pylons_obj
+        
+        environ['pylons.environ_config'] = self.environ_config
         
         # Setup the translator global object
         translator = gettext.NullTranslations()
@@ -264,7 +267,7 @@ class PylonsApp(object):
         
         # If it's a class, instantiate it
         if not hasattr(controller, '__class__') or \
-            getattr(controller, '__class__') == type:
+            isinstance(getattr(controller, '__class__'), type):
             if log_debug:
                 log.debug("Controller appears to be a class, instantiating")
             controller = controller()
