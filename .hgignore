@@ -11,3 +11,5 @@ container_dbm*
 *~
 build/
 dist/
+docs/html/docs
+output/ProjectName

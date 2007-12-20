@@ -9,8 +9,8 @@ import pylons
 
 log = logging.getLogger(__name__)
 
-def beaker_cache(key="cache_default", expire="never", type="dbm",
-    query_args=False, **b_kwargs):
+def beaker_cache(key="cache_default", expire="never", type=None,
+    query_args=False, response=False, **b_kwargs):
     """Cache decorator utilizing Beaker. Caches action or other function that
     returns a pickle-able object as a result.
 
@@ -24,9 +24,15 @@ def beaker_cache(key="cache_default", expire="never", type="dbm",
     expire
         Time in seconds before cache expires, defaults to never
     type
-        Type of cache to use: dbm, memory, file, memcached
+        Type of cache to use: dbm, memory, file, memcached, or None for
+        Beaker's default
     query_args
         Uses the query arguments as the key, defaults to False
+    response
+        Whether or not the response status/headers/cookies present at 
+        the time the cache is generated should be restored. This is
+        ideal for caching controller actions, but shouldn't be used
+        for caching non-action functions. Defaults to False.
 
     If cache_enabled is set to False in the .ini file, then cache is disabled
     globally.
@@ -55,19 +61,32 @@ def beaker_cache(key="cache_default", expire="never", type="dbm",
                       cache_key, type)
             result = func(*args, **kwargs)
             glob_response = pylons.response._current_obj()
-            full_response = dict(headers=glob_response.headers,
-                                 status=glob_response.status_code,
-                                 cookies=glob_response.cookies,
-                                 content=result)
+            if pylons.config['pylons.use_webob']:
+                headers = glob_response.headerlist
+                status = glob_response.status
+                cookies=None
+            else:
+                headers = glob_response.headers
+                status = glob_response.status_code
+                cookies = glob_response.cookies
+            full_response = dict(headers=headers, status=status,
+                                 cookies=cookies, content=result)
             return full_response
         
+        if type:
+            b_kwargs['type'] = type
+        
         response = my_cache.get_value(cache_key, createfunc=create_func,
-                                     type=type, expiretime=cache_expire,
-                                     **b_kwargs)
-        glob_response = pylons.response._current_obj()
-        glob_response.headers = response['headers']
-        glob_response.status_code = response['status']
-        glob_response.cookies = response['cookies']
+                                     expiretime=cache_expire, **b_kwargs)
+        if response:
+            glob_response = pylons.response._current_obj()
+            if pylons.config['pylons.use_webob']:
+                glob_response.headerlist = response['headers']
+                glob_response.status = response['status']
+            else:
+                glob_response.headers = response['headers']
+                glob_response.status_code = response['status']
+                glob_response.cookies = response['cookies']
         return response['content']
     return decorator(wrapper)
 

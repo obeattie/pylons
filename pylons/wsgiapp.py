@@ -14,7 +14,7 @@ import paste.httpexceptions as httpexceptions
 import paste.registry
 from paste.wsgiwrappers import WSGIRequest, WSGIResponse
 from routes import request_config
-from routes.middleware import RoutesMiddleware
+from webob import Request, Response
 
 import pylons
 import pylons.legacy
@@ -22,14 +22,14 @@ import pylons.templating
 from pylons.controllers import Controller, WSGIController
 from pylons.i18n import set_lang
 from pylons.util import ContextObj, AttribSafeContextObj, \
-    class_name_from_module_name
+    class_name_from_module_name, PylonsContext
 
 __all__ = ['PylonsApp', 'PylonsBaseWSGIApp']
 
 log = logging.getLogger(__name__)
 
-class PylonsBaseWSGIApp(object):
-    """Basic Pylons WSGI Application
+class PylonsApp(object):
+    """Pylons WSGI Application
 
     This basic WSGI app is provided should a web developer want to
     get access to the most basic Pylons web application environment
@@ -44,22 +44,24 @@ class PylonsBaseWSGIApp(object):
     Resolving the URL and dispatching can be customized by sub-classing or
     "monkey-patching" this class. Subclassing is the preferred approach.
     """
-    def __init__(self, config, globals, helpers=None):
+    def __init__(self, use_webob=False, **kwargs):
         """Initialize a base Pylons WSGI application
         
         The base Pylons WSGI application requires several keywords, the package
         name, and the globals object. If no helpers object is provided then h
         will be None.
         """
-        self.config = config
+        self.config = config = pylons.config._current_obj()
         package_name = config['pylons.package']
-        self.helpers = helpers
-        self.globals = globals
+        self.helpers = config['pylons.h']
+        self.globals = config['pylons.g']
+        self.environ_config = config['pylons.environ_config']
         self.package_name = package_name
         self.request_options = config['pylons.request_options']
         self.response_options = config['pylons.response_options']
         self.controller_classes = {}
         self.log_debug = False
+        self.use_webob = config['pylons.use_webob'] = use_webob
         
         # Create the redirect function we'll use and save it
         def redirect_to(url):
@@ -98,54 +100,93 @@ class PylonsBaseWSGIApp(object):
                                                             'wsgi_response'):
             environ['paste.testing_variables']['response'] = response
         
-        if hasattr(response, 'wsgi_response'):
-            # Transform Response objects from legacy Controller
-            if log_debug:
-                log.debug("Transforming legacy Response object into WSGI "
-                          "response")
-            return response(environ, start_response)
-        elif response:
-            return response
+        try:
+            if hasattr(response, 'wsgi_response'):
+                # Transform Response objects from legacy Controller
+                if log_debug:
+                    log.debug("Transforming legacy Response object into WSGI "
+                              "response")
+                return response(environ, start_response)
+            elif response:
+                return response
         
-        raise Exception("No content returned by controller (Did you remember "
-                        "to 'return' it?) in: %r" % controller.__name__)
+            raise Exception("No content returned by controller (Did you remember "
+                            "to 'return' it?) in: %r" % controller.__name__)
+        finally:
+            # Help Python collect ram a bit faster by removing the reference 
+            # cycle that the pylons object causes
+            del environ['pylons.pylons']
     
     def setup_app_env(self, environ, start_response):
         """Setup and register all the Pylons objects with the registry"""
         if self.log_debug:
             log.debug("Setting up Pylons stacked object globals")
         registry = environ['paste.registry']
-
-        registry.register(WSGIRequest.defaults, self.request_options)
-        registry.register(WSGIResponse.defaults, self.response_options)
-
-        req = WSGIRequest(environ)
-                
+        
         # Setup the basic pylons global objects
-        registry.register(pylons.request, req)
-        registry.register(pylons.response, WSGIResponse())
+        
+        if self.use_webob:
+            req = Request(environ)
+            registry.register(pylons.request, req)
+            response = Response(
+                content_type=self.response_options['content_type'],
+                charset=self.response_options['charset'])
+            response.headers.update(self.response_options['headers'])
+            registry.register(pylons.response, response)
+        else:
+            req = WSGIRequest(environ)
+            response = WSGIResponse()
+            registry.register(WSGIRequest.defaults, self.request_options)
+            registry.register(WSGIResponse.defaults, self.response_options)
+            registry.register(pylons.request, req)
+            registry.register(pylons.response, response)
+        
         registry.register(pylons.buffet, self.buffet)
         registry.register(pylons.g, self.globals)
         registry.register(pylons.config, self.config)
         registry.register(pylons.h, self.helpers or \
                           pylons.legacy.load_h(self.package_name))
         
+        # Store a copy of the request/response in environ for faster access
+        pylons_obj = PylonsContext()
+        pylons_obj.request = req
+        pylons_obj.response = response
+        pylons_obj.g = self.globals
+        pylons_obj.h = self.helpers
+        pylons_obj.buffet = self.buffet
+        environ['pylons.pylons'] = pylons_obj
+        
+        environ['pylons.environ_config'] = self.environ_config
+        
         # Setup the translator global object
-        registry.register(pylons.translator, gettext.NullTranslations())
+        translator = gettext.NullTranslations()
+        registry.register(pylons.translator, translator)
         lang = self.config.get('lang')
         if lang:
             set_lang(lang)
         
         if self.config['pylons.strict_c']:
-            registry.register(pylons.c, ContextObj())
+            c = ContextObj()
+            registry.register(pylons.c, c)
         else:
-            registry.register(pylons.c, AttribSafeContextObj())
+            c = AttribSafeContextObj()
+            registry.register(pylons.c, c)
         
-        econf = environ['pylons.environ_config']
+        pylons_obj.c = c
+        
+        econf = self.config['pylons.environ_config']
         if econf.get('session'):
+            pylons_obj.session = environ[econf['session']]
             registry.register(pylons.session, environ[econf['session']])
+        elif 'beaker.session' in environ:
+            pylons_obj.session = environ['beaker.session']
+            registry.register(pylons.session, environ['beaker.session'])
         if econf.get('cache'):
+            pylons_obj.cache = environ[econf['cache']]
             registry.register(pylons.cache, environ[econf['cache']])
+        elif 'beaker.cache' in environ:
+            pylons_obj.cache = environ['beaker.cache']
+            registry.register(pylons.cache, environ['beaker.cache'])
     
     def resolve(self, environ, start_response):
         """Uses dispatching information found in 
@@ -163,7 +204,7 @@ class PylonsBaseWSGIApp(object):
         environ['pylons.routes_dict'] = match
         controller = match.get('controller')
         if not controller:
-            return None
+            return
 
         if self.log_debug:
             log.debug("Resolved URL to controller: %r", controller)
@@ -217,6 +258,7 @@ class PylonsBaseWSGIApp(object):
                 not issubclass(controller, WSGIController) and \
                 issubclass(controller, Controller):
             controller = controller()
+            controller._use_webob = self.use_webob
             controller.start_response = start_response
             controller._pylons_log_debug = log_debug
             if log_debug:
@@ -224,11 +266,11 @@ class PylonsBaseWSGIApp(object):
             return controller(**match)
         
         # If it's a class, instantiate it
-        if not hasattr(controller, '__class__') or \
-            getattr(controller, '__class__') == type:
+        if inspect.isclass(controller):
             if log_debug:
                 log.debug("Controller appears to be a class, instantiating")
             controller = controller()
+            controller._use_webob = self.use_webob
             controller._pylons_log_debug = log_debug
         
         # Controller is assumed to handle a WSGI call
@@ -246,70 +288,12 @@ class PylonsBaseWSGIApp(object):
         testenv['g'] = pylons.g._current_obj()
         testenv['h'] = self.config['pylons.h'] or pylons.h._current_obj()
         testenv['config'] = self.config
-        econf = environ['pylons.environ_config']
+        econf = self.config['pylons.environ_config']
         if econf.get('session'):
             testenv['session'] = environ[econf['session']]
+        elif 'beaker.session' in environ:
+            testenv['session'] = environ['beaker.session']
         if econf.get('cache'):
             testenv['cache'] = environ[econf['cache']]
-
-
-class PylonsApp(object):
-    """Setup the Pylons default environment
-    
-    Pylons App sets up the basic Pylons app, and initializes the global
-    object, sessions and caching. Sessions and caching can be overridden
-    in the config object by supplying other keys to look for in the environ
-    where objects for the session/cache will be. If they're set to none,
-    then no session/cache objects will be available.
-    """
-    def __init__(self, config=None, helpers=None, g=None,
-                 use_routes=True, base_wsgi_app=None):
-        self.config = config = pylons.config._current_obj()
-
-        if helpers is not None or g is not None:
-            template_engine = config['buffet.template_engines'][0]['engine']
-            warnings.warn(pylons.legacy.helpers_and_g_warning % \
-                              dict(package=config['pylons.package'],
-                                   template_engine=template_engine),
-                          DeprecationWarning, 2)
-
-        if helpers is None:
-            helpers = config.get('pylons.h')
-        if g is None:
-            g = config.get('pylons.g')
-        else:
-            if len(inspect.getargspec(g.__init__)[0]) > 1:
-                warnings.warn(pylons.legacy.g_confargs, DeprecationWarning, 2)
-                g = g(config['global_conf'], config['app_conf'], config=config)
-            else:
-                g = g()
-
-        config['pylons.g'] = g
-        config['pylons.h'] = helpers
-        
-        # Create the base Pylons wsgi app
-        base_app = base_wsgi_app or PylonsBaseWSGIApp
-        app = base_app(config, g, helpers=helpers)
-        if use_routes:
-            app = RoutesMiddleware(app, config['routes.map'])
-        
-        # Pull user-specified environ overrides, or just setup default
-        # session and caching objects
-        self.econf = econf = config['pylons.environ_config'].copy()
-        if 'session' not in econf:
-            from beaker.middleware import SessionMiddleware
-            econf['session'] = 'beaker.session'
-            app = SessionMiddleware(app, config)
-        
-        if 'cache' not in econf:
-            from beaker.middleware import CacheMiddleware
-            econf['cache'] = 'beaker.cache'
-            app = CacheMiddleware(app, config)
-
-        # Legacy: PylonsApp.globals
-        self.globals = g
-        self.app = app
-    
-    def __call__(self, environ, start_response):
-        environ['pylons.environ_config'] = self.econf
-        return self.app(environ, start_response)
+        elif 'beaker.cache' in environ:
+            testenv['cache'] = environ['beaker.cache']
