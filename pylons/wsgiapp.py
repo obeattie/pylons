@@ -12,19 +12,18 @@ import warnings
 
 import paste.httpexceptions as httpexceptions
 import paste.registry
-from paste.wsgiwrappers import WSGIRequest, WSGIResponse
 from routes import request_config
-from webob import Request, Response
 
 import pylons
 import pylons.legacy
 import pylons.templating
-from pylons.controllers import Controller, WSGIController
+from pylons.controllers import WSGIController
+from pylons.controllers.util import Request, Response
 from pylons.i18n import set_lang
 from pylons.util import ContextObj, AttribSafeContextObj, \
     class_name_from_module_name, PylonsContext
 
-__all__ = ['PylonsApp', 'PylonsBaseWSGIApp']
+__all__ = ['PylonsApp']
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +43,7 @@ class PylonsApp(object):
     Resolving the URL and dispatching can be customized by sub-classing or
     "monkey-patching" this class. Subclassing is the preferred approach.
     """
-    def __init__(self, use_webob=False, **kwargs):
+    def __init__(self, **kwargs):
         """Initialize a base Pylons WSGI application
         
         The base Pylons WSGI application requires several keywords, the package
@@ -61,7 +60,6 @@ class PylonsApp(object):
         self.response_options = config['pylons.response_options']
         self.controller_classes = {}
         self.log_debug = False
-        self.use_webob = config['pylons.use_webob'] = use_webob
         
         # Create the redirect function we'll use and save it
         def redirect_to(url):
@@ -124,22 +122,14 @@ class PylonsApp(object):
         registry = environ['paste.registry']
         
         # Setup the basic pylons global objects
-        
-        if self.use_webob:
-            req = Request(environ)
-            registry.register(pylons.request, req)
-            response = Response(
-                content_type=self.response_options['content_type'],
-                charset=self.response_options['charset'])
-            response.headers.update(self.response_options['headers'])
-            registry.register(pylons.response, response)
-        else:
-            req = WSGIRequest(environ)
-            response = WSGIResponse()
-            registry.register(WSGIRequest.defaults, self.request_options)
-            registry.register(WSGIResponse.defaults, self.response_options)
-            registry.register(pylons.request, req)
-            registry.register(pylons.response, response)
+        req = Request(environ)
+        req.language = self.request_options['language']
+        registry.register(pylons.request, req)
+        response = Response(
+            content_type=self.response_options['content_type'],
+            charset=self.response_options['charset'])
+        response.headers.update(self.response_options['headers'])
+        registry.register(pylons.response, response)
         
         registry.register(pylons.buffet, self.buffet)
         registry.register(pylons.g, self.globals)
@@ -253,24 +243,11 @@ class PylonsApp(object):
 
         match = environ['pylons.routes_dict']
         
-        # Older subclass of Controller
-        if inspect.isclass(controller) and \
-                not issubclass(controller, WSGIController) and \
-                issubclass(controller, Controller):
-            controller = controller()
-            controller._use_webob = self.use_webob
-            controller.start_response = start_response
-            controller._pylons_log_debug = log_debug
-            if log_debug:
-                log.debug("Calling older Controller subclass")
-            return controller(**match)
-        
         # If it's a class, instantiate it
         if inspect.isclass(controller):
             if log_debug:
                 log.debug("Controller appears to be a class, instantiating")
             controller = controller()
-            controller._use_webob = self.use_webob
             controller._pylons_log_debug = log_debug
         
         # Controller is assumed to handle a WSGI call

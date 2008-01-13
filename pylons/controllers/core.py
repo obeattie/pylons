@@ -4,15 +4,12 @@ import logging
 import types
 import warnings
 
-from paste.httpexceptions import HTTPException
-from paste.response import HeaderDict
-from paste.wsgiwrappers import WSGIResponse
-from webob import Response
-from webob.exc import HTTPNotFound, status_map
+from webob.exc import HTTPException, HTTPNotFound, status_map
 
 import pylons
+from pylons.controllers.util import Response
 
-__all__ = ['Controller', 'WSGIController']
+__all__ = ['WSGIController']
 
 log = logging.getLogger(__name__)
 
@@ -40,12 +37,11 @@ class WSGIController(object):
     In the event that an action is not found to handle the request, the
     Controller will raise an "Action Not Found" error if in debug mode,
     otherwise a ``404 Not Found`` error will be returned.
-    """
     
+    """
     __pudge_all__ = ['_inspect_call', '__call__', '_get_method_args', 
                      '_dispatch_call']
     _pylons_log_debug = False
-    _use_webob = False
     
     def _perform_call(self, func, args):
         # Hide the traceback for everything above this method
@@ -89,13 +85,11 @@ class WSGIController(object):
                 log.debug("%r method raised HTTPException: %s (code: %s)",
                           func.__name__, httpe.__class__.__name__, httpe.code,
                           exc_info=True)
-            if self._use_webob:
-                result = httpe
-                if result.status_int == 304:
-                    result.headers.pop('Content-Type', None)
-            else:
-                result = httpe.response(pylons.request.environ)
-                result.headers.pop('Content-Type')
+            result = httpe
+            
+            # 304 Not Modified's shouldn't have a content-type set
+            if result.status_int == 304:
+                result.headers.pop('Content-Type', None)
             result._exception = True
         return result
     
@@ -138,10 +132,7 @@ class WSGIController(object):
                 raise NotImplementedError('Action %r is not implemented' %
                                           action)
             else:
-                if self._use_webob:
-                    response = HTTPNotFound().response(req.environ)
-                else:
-                    response = WSGIResponse(code=404)
+                response = HTTPNotFound()
         return response
     
     def __call__(self, environ, start_response):
@@ -155,10 +146,7 @@ class WSGIController(object):
             if log_debug:
                 log.debug("Action starts with _, private action not allowed. "
                           "Returning a 404 response")
-            if self._use_webob:
-                return HTTPNotFound()(environ, start_response)
-            else:
-                return WSGIResponse(code=404)(environ, start_response)
+            return HTTPNotFound()(environ, start_response)
 
         start_response_called = []
         def repl_start_response(status, headers, exc_info=None):
@@ -166,20 +154,12 @@ class WSGIController(object):
             start_response_called.append(None)
             
             # Copy the headers from the global response
-            # XXX: TODO: This should really be done with a more efficient 
-            #            header merging function at some point.
             if log_debug:
                 log.debug("Merging pylons.response headers into "
                           "start_response call, status: %s", status)
-            if not isinstance(response, WSGIResponse):
-                for header in response.headerlist:
-                    if header[0] == 'Set-Cookie' or header[0].startswith('X-'):
-                        headers.append(header)
-            else:
-                response.headers.update(HeaderDict.fromlist(headers))
-                headers = response.headers.headeritems()
-                for c in pylons.response.cookies.values():
-                    headers.append(('Set-Cookie', c.output(header='')))
+            for header in response.headerlist:
+                if header[0] == 'Set-Cookie' or header[0].startswith('X-'):
+                    headers.append(header)
             return start_response(status, headers, exc_info)
         self.start_response = repl_start_response
         
@@ -190,6 +170,7 @@ class WSGIController(object):
         
         response = self._dispatch_call()
         if not start_response_called:
+            self.start_response = start_response
             py_response = self._py_object.response
             # If its not a WSGI response, and we have content, it needs to
             # be wrapped in the response object
@@ -200,9 +181,6 @@ class WSGIController(object):
                     log.debug("Controller returned a Response object, merging "
                               "it with pylons.response")
                 response.headers.update(py_response.headers)
-                if not self._use_webob:
-                    for c in py_response.cookies.values():
-                        response.headers.add('Set-Cookie', c.output(header=''))
                 registry = environ['paste.registry']
                 registry.replace(pylons.response, response)
                 py_response = response
@@ -210,10 +188,7 @@ class WSGIController(object):
                 if log_debug:
                     log.debug("Controller returned a generator, setting it as "
                               "the pylons.response content")
-                if self._use_webob:
-                    py_response.app_iter = response
-                else:
-                    py_response.content = response
+                py_response.app_iter = response
             elif response is None:
                 if log_debug:
                     log.debug("Controller returned None")
@@ -221,15 +196,12 @@ class WSGIController(object):
                 if log_debug:
                     log.debug("Assuming controller returned a basestring or "
                               "buffer, writing it to pylons.response")
-                if self._use_webob:
-                    if isinstance(response, str):
-                        py_response.body = py_response.body + response
-                    elif isinstance(response, unicode):
-                        py_response.unicode_body = py_response.unicode_body + response
-                    else:
-                        py_response.body = response
+                if isinstance(response, str):
+                    py_response.body = py_response.body + response
+                elif isinstance(response, unicode):
+                    py_response.unicode_body = py_response.unicode_body + response
                 else:
-                    py_response.write(response)
+                    py_response.body = response
             response = py_response
         
         if hasattr(self, '__after__'):
@@ -237,7 +209,7 @@ class WSGIController(object):
             if hasattr(after, '_exception'):
                 return after(environ, self.start_response)
         
-        if hasattr(response, 'wsgi_response') or isinstance(response, Response):
+        if hasattr(response, 'wsgi_response'):
             # Copy the response object into the testing vars if we're testing
             if 'paste.testing_variables' in environ:
                 environ['paste.testing_variables']['response'] = response
@@ -247,56 +219,4 @@ class WSGIController(object):
         
         if log_debug:
             log.debug("Response assumed to be WSGI content, returning un-touched")
-        return response
-
-
-class Controller(WSGIController):
-    """Deprecated Pylons Controller for Web Requests
-    
-    All Pylons projects should use the WSGIController.
-    """
-    def __init__(self, *args, **kwargs):
-        warnings.warn("Controller class is deprecated, switch to using the"
-                      "WSGIController class", DeprecationWarning, 2)
-        WSGIController.__init__(self, *args, **kwargs)
-    
-    def __call__(self, *args, **kargs):
-        """Makes our controller a callable to handle requests
-        
-        This is called when dispatched to as the Controller class docs explain
-        more fully.
-        """
-        req = pylons.request._current_obj()
-        
-        # Keep private methods private
-        if req.environ['pylons.routes_dict'].get('action', '').startswith('_'):
-            return WSGIResponse(code=404)
-        
-        if hasattr(self, '__before__'):
-            self._inspect_call(self.__before__, **kargs)
-        response = self._dispatch_call()
-        
-        # If its not a WSGI response, and we have content, it needs to
-        # be wrapped in the response object
-        if hasattr(response, 'wsgi_response'):
-            # It's either a legacy WSGIResponse object, or an exception
-            # that got tossed. Strip headers if its anything other than a
-            # 2XX status code, and strip cookies if its anything other than
-            # a 2XX or 3XX status code.
-            if response.status_code < 300:
-                response.headers.update(pylons.response.headers)
-            if response.status_code < 400:
-                for c in pylons.response.cookies.values():
-                    response.headers.add('Set-Cookie', c.output(header=''))
-            registry = req.environ['paste.registry']
-            registry.replace(pylons.response, response)
-        elif isinstance(response, types.GeneratorType):
-            pylons.response.content = response
-        elif isinstance(response, basestring):
-            pylons.response.write(response)
-        response = pylons.response._current_obj()
-        
-        if hasattr(self, '__after__'):
-            self._inspect_call(self.__after__)
-        
         return response
