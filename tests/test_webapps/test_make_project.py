@@ -1,7 +1,12 @@
-import urllib
+"""Tests against full Pylons projects created from scratch"""
 import os
-from paste.fixture import *
+import sys
+import time
+import urllib
+
 import pkg_resources
+from paste.fixture import *
+
 for spec in ['PasteScript', 'Paste', 'PasteDeploy', 'pylons']:
     pkg_resources.require(spec)
 
@@ -89,6 +94,11 @@ def _do_proj_test(copydict, emptyfiles=None):
     """Given a dict of files, where the key is a filename in filestotest, the value is
     the destination in the new projects dir. emptyfiles is a list of files that should
     be created and empty."""
+    if sys.platform.startswith('java'):
+        # Hack for Jython .py/bytecode mtime handling:
+        # http://bugs.jython.org/issue1024 (the issue actually describes
+        # this test)
+        time.sleep(1)
     if not emptyfiles:
         emptyfiles = []
     for original, newfile in copydict.iteritems():
@@ -99,7 +109,7 @@ def _do_proj_test(copydict, emptyfiles=None):
                       expect_stderr=True,
                       cwd=os.path.join(testenv.cwd, 'ProjectName').replace('\\','/'))
 
-def do_pytest():
+def do_nosetests():
     _do_proj_test({'development.ini':'development.ini'})
 
 def do_knowntest():
@@ -213,7 +223,7 @@ def test_project():
     #yield svn_repos_setup
     yield (paster_create,)
     yield (make_controller,)
-    yield (do_pytest,)
+    yield (do_nosetests,)
     yield (do_knowntest,)
     yield (do_i18ntest,)
     yield (do_kid_default,)
