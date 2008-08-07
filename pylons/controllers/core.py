@@ -80,7 +80,7 @@ class WSGIController(object):
             args = kargs
         else:
             args = {}
-            argnames = argspec[0][1:]
+            argnames = argspec[0][isinstance(func, types.MethodType) and 1 or 0:]
             for name in argnames:
                 if name in kargs:
                     setattr(c, name, kargs[name])
@@ -138,6 +138,9 @@ class WSGIController(object):
         log_debug = self._pylons_log_debug
         req = self._py_object.request
         action = req.environ['pylons.routes_dict'].get('action')
+        if not action:
+            raise Exception("No action matched from Routes, unable to"
+                            "determine action dispatch.")
         action_method = action.replace('-', '_')
         if log_debug:
             log.debug("Looking for %r method to handle the request",
@@ -146,7 +149,7 @@ class WSGIController(object):
             func = getattr(self, action_method, None)
         except UnicodeEncodeError:
             func = None
-        if isinstance(func, types.MethodType):
+        if action_method != 'start_response' and callable(func):
             # Store function used to handle request
             req.environ['pylons.action_method'] = func
             
@@ -207,7 +210,11 @@ class WSGIController(object):
                 if log_debug:
                     log.debug("Controller returned a Response object, merging "
                               "it with pylons.response")
-                response.headers.update(py_response.headers)
+                for name, value in py_response.headers.items():
+                    if name.lower() == 'set-cookie':
+                        response.headers.add(name, value)
+                    else:
+                        response.headers.setdefault(name, value)
                 registry = environ['paste.registry']
                 registry.replace(pylons.response, response)
                 py_response = response

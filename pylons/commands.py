@@ -10,7 +10,6 @@ Commands available:
 
 ``controller``
     Create a Controller and accompanying functional test
-
 ``restcontroller``
     Create a REST Controller and accompanying functional test
 ``shell``
@@ -58,8 +57,8 @@ import pylons
 __all__ = ['ControllerCommand', 'RestControllerCommand', 'ShellCommand']
 
 def can_import(name):
-    """Attempt to __import__ the specified package/module, returning True when
-    succeeding, otherwise False"""
+    """Attempt to __import__ the specified package/module, returning
+    True when succeeding, otherwise False"""
     try:
         __import__(name)
         return True
@@ -68,8 +67,8 @@ def can_import(name):
 
 
 def is_minimal_template(package):
-    """Determine if the specified Pylons project (package) uses the Pylons
-    Minimal Tempalte"""
+    """Determine if the specified Pylons project (package) uses the
+    Pylons Minimal Tempalte"""
     minimal_template = False
     try:
         # Check if PACKAGE.lib.base exists
@@ -146,6 +145,7 @@ class ControllerCommand(Command):
         Creating yourproj/controllers/admin
         Creating yourproj/yourproj/controllers/admin/trackback.py
         Creating yourproj/yourproj/tests/functional/test_admin_trackback.py
+
     """
     summary = __doc__.splitlines()[0]
     usage = '\n' + __doc__
@@ -225,9 +225,9 @@ class RestControllerCommand(Command):
     """Create a REST Controller and accompanying functional test
 
     The RestController command will create a REST-based Controller file
-    for use with the :meth:`~routes.base.Mapper.resource`
+    for use with the :meth:`~routes.mapper.Mapper.resource`
     REST-based dispatching. This template includes the methods that
-    :meth:`~routes.base.Mapper.resource` dispatches to in
+    :meth:`~routes.mapper.Mapper.resource` dispatches to in
     addition to doc strings for clarification on when the methods will
     be called.
 
@@ -250,6 +250,7 @@ class RestControllerCommand(Command):
         Creating yourproj/controllers/admin
         Creating yourproj/yourproj/controllers/admin/trackbacks.py
         Creating yourproj/yourproj/tests/functional/test_admin_trackbacks.py
+
     """
     summary = __doc__.splitlines()[0]
     usage = '\n' + __doc__
@@ -286,7 +287,7 @@ class RestControllerCommand(Command):
                     'Your controller name should not be the same as '
                     'the package name %r.'% base_package)
             # Validate the name
-            for name in [singularname, pluralname]:
+            for name in [pluralname]:
                 name = name.replace('-', '_')
                 validate_name(name)
 
@@ -344,7 +345,7 @@ class RestControllerCommand(Command):
                               template_renderer=paste_script_template_renderer)
             if not self.options.no_test:
                 file_op.copy_file(
-                    template='test_controller.py_tmpl',
+                    template='test_restcontroller.py_tmpl',
                     dest=os.path.join('tests', 'functional'),
                     filename='test_' + testname,
                     template_renderer=paste_script_template_renderer)
@@ -368,6 +369,7 @@ class ShellCommand(Command):
     Example::
 
         $ paster shell my-development.ini
+
     """
     summary = __doc__.splitlines()[0]
     usage = '\n' + __doc__
@@ -447,6 +449,25 @@ class ShellCommand(Command):
 
         # Start the rest of our imports now that the app is loaded
         found_base = False
+
+        model_module = pkg_name + '.model'
+        found_model = can_import(model_module)
+        if found_model:
+            model = sys.modules[model_module]
+            locs['model'] = model
+
+        helpers_module = pkg_name + '.lib.helpers'
+        found_helpers = can_import(helpers_module)
+        if found_helpers:
+            helpers = sys.modules[helpers_module]
+            locs['h'] = helpers
+
+        exec 'from pylons import c, cache, config, g, request, response, session' in locs
+        exec 'from pylons.controllers import WSGIController' in locs
+        exec 'from pylons.decorators import jsonify, validate' in locs
+        exec 'from pylons.controllers.util import abort, etag_cache, redirect_to' in locs
+        exec 'from pylons.i18n import _, ungettext, N_' in locs
+        exec 'from pylons.templating import render' in locs
         
         # Import all objects from the base module
         base_module = pkg_name + '.lib.base'
