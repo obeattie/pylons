@@ -49,7 +49,7 @@ var TRACEBACK = {
 </div>
 <div class="clearfix">&nbsp;</div>
 <div class="overviewtab">
-<h3>Looking for help?</h3>
+<b>Looking for help?</b>
 
 <p>Here are a few tips for troubleshooting if the above traceback isn't
 helping out.</p>
@@ -84,7 +84,7 @@ PylonsHQ website in this browser.</p>
 
 </div>
 <div id="pylons_logo">\
-<img src="{{prefix}}/media/pylons/img/pylons-tower120.png" /></div>
+<img src="{{prefix}}/media/pylons/img/pylons-powered-02.png" /></div>
 <div class="credits">Pylons version %s</div>"""
 
 class StaticJavascripts(object):
@@ -129,7 +129,7 @@ def ErrorHandler(app, global_conf, **errorware):
 
     if asbool(global_conf.get('debug')):
         footer = footer_html % (pylons.config.get('traceback_host', 
-                                                  'beta.pylonshq.com'),
+                                                  'pylonshq.com'),
                                 pylons.__version__)
         py_media = dict(pylons=media_path)
         app = EvalException(app, global_conf, 
@@ -231,7 +231,7 @@ error_document_template = literal("""\
 <link rel="stylesheet" href="%(prefix)s/error/style/black.css" type="text/css" media="screen" />
 
 <!-- Favorite Icons -->
-<link rel="icon" href="%(prefix)s/error/img/icon-16.png" type="image/png" />
+<link rel="icon" href="%(prefix)s/error/img/favicon.ico" type="image/png" />
 
 <style type="text/css">
         .red {

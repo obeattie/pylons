@@ -25,15 +25,14 @@ Installing
     Python 2.3, see :ref:`python23_installation`.
 
 To avoid conflicts with system-installed Python libraries, Pylons comes with a
-boot-strap Python script that sets up a `virtual environment <http://pypi.python.org/pypi/virtualenv>`_. Pylons will then be
-installed under the virtual environment.
+boot-strap Python script that sets up a "virtual" Python environment. Pylons will then be installed under the virtual environment.
 
 .. admonition:: By the Way
     
-    virtualenv is a useful tool to create isolated Python environments. In 
-    addition to isolating packages from possible system conflicts, it makes
-    it easy to install Python libraries using `easy_install <http://peak.telecommunity.com/DevCenter/EasyInstall>`_ without dumping lots
-    of packages into the system-wide Python.
+    :term:`virtualenv` is a useful tool to create isolated Python environments.
+    In addition to isolating packages from possible system conflicts, it makes
+    it easy to install Python libraries using :term:`easy_install` without
+    dumping lots of packages into the system-wide Python.
     
     The other great benefit is that no root access is required since all
     modules are kept under the desired directory. This makes it easy
@@ -113,13 +112,12 @@ Create a new project named ``helloworld`` with the following command:
     
     Windows users must configure their ``PATH`` as described in :ref:`windows_notes`, otherwise they must specify the full path to the ``paster`` command (including the virtual environment bin directory).
 
-Running this will prompt for three choices:
+Running this will prompt for two choices:
 
 1. which templating engine to use
 2. whether to include :term:`SQLAlchemy` support
-3. whether to set :term:`Google App Engine` specific options
 
-Hit enter at each prompt to accept the defaults (Mako templating, no :term:`SQLAlchemy`, no :term:`Google App Engine` settings). 
+Hit enter at each prompt to accept the defaults (Mako templating, no :term:`SQLAlchemy`). 
 
 Here is the created directory structure with links to more information:
 
@@ -236,7 +234,7 @@ directory with the following contents:
     
     ${request.environ}
 
-The :term:`request` variable in templates is used to get information about the current request. `template globals <modules/templating.html#template-globals>`_ lists all the variables Pylons makes available for use in templates.
+The :term:`request` variable in templates is used to get information about the current request. `template globals <../modules/templating/#template-globals>`_ lists all the variables Pylons makes available for use in templates.
 
 Next, update the :file:`controllers/hello.py` module so that the
 index method is as follows:

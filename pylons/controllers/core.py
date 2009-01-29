@@ -143,8 +143,9 @@ class WSGIController(object):
         Routes"""
         log_debug = self._pylons_log_debug
         req = self._py_object.request
-        action = req.environ['pylons.routes_dict'].get('action')
-        if not action:
+        try:
+            action = req.environ['pylons.routes_dict']['action']
+        except KeyError:
             raise Exception("No action matched from Routes, unable to"
                             "determine action dispatch.")
         action_method = action.replace('-', '_')
@@ -178,11 +179,15 @@ class WSGIController(object):
         self._py_object = environ['pylons.pylons']
 
         # Keep private methods private
-        if environ['pylons.routes_dict'].get('action', '')[:1] in ('_', '-'):
-            if log_debug:
-                log.debug("Action starts with _, private action not allowed. "
-                          "Returning a 404 response")
-            return HTTPNotFound()(environ, start_response)
+        try:
+            if environ['pylons.routes_dict']['action'][:1] in ('_', '-'):
+                if log_debug:
+                    log.debug("Action starts with _, private action not allowed. "
+                              "Returning a 404 response")
+                return HTTPNotFound()(environ, start_response)
+        except KeyError:
+            # The check later will notice that there's no action
+            pass
 
         start_response_called = []
         def repl_start_response(status, headers, exc_info=None):
@@ -210,7 +215,18 @@ class WSGIController(object):
             py_response = self._py_object.response
             # If its not a WSGI response, and we have content, it needs to
             # be wrapped in the response object
-            if hasattr(response, 'wsgi_response'):
+            if isinstance(response, str):
+                if log_debug:
+                    log.debug("Controller returned a string "
+                              ", writing it to pylons.response")
+                py_response.body = py_response.body + response
+            elif isinstance(response, unicode):
+                if log_debug:
+                    log.debug("Controller returned a unicode string "
+                              ", writing it to pylons.response")
+                py_response.unicode_body = py_response.unicode_body + \
+                        response
+            elif hasattr(response, 'wsgi_response'):
                 # It's either a legacy WSGIResponse object, or an exception
                 # that got tossed.
                 if log_debug:
@@ -228,8 +244,12 @@ class WSGIController(object):
                         response.headers.add(name, value)
                     else:
                         response.headers.setdefault(name, value)
-                registry = environ['paste.registry']
-                registry.replace(pylons.response, response)
+                try:
+                    registry = environ['paste.registry']
+                    registry.replace(pylons.response, response)
+                except KeyError:
+                    # Ignore the case when someone removes the registry
+                    pass
                 py_response = response
             elif isinstance(response, types.GeneratorType):
                 if log_debug:
@@ -241,15 +261,9 @@ class WSGIController(object):
                     log.debug("Controller returned None")
             else:
                 if log_debug:
-                    log.debug("Assuming controller returned a basestring or "
-                              "buffer, writing it to pylons.response")
-                if isinstance(response, str):
-                    py_response.body = py_response.body + response
-                elif isinstance(response, unicode):
-                    py_response.unicode_body = py_response.unicode_body + \
-                        response
-                else:
-                    py_response.body = response
+                    log.debug("Assuming controller returned a buffer "
+                              ", writing it to pylons.response")
+                py_response.body = response
             response = py_response
         
         if hasattr(self, '__after__'):
@@ -263,6 +277,9 @@ class WSGIController(object):
                 environ['paste.testing_variables']['response'] = response
             if log_debug:
                 log.debug("Calling Response object to return WSGI data")
+            
+            # Save a reference to the original responze object
+            environ['pylons.orig_response'] = response
             return response(environ, self.start_response)
         
         if log_debug:
