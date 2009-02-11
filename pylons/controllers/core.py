@@ -30,14 +30,17 @@ class WSGIController(object):
     Special WSGIController methods you may define:
     
     ``__before__``
-        This method will be run before your action is, and should be
-        used for setting up variables/objects, restricting access to
-        other actions, or other tasks which should be executed before
-        the action is called.
+        This method is called before your action is, and should be used
+        for setting up variables/objects, restricting access to other
+        actions, or other tasks which should be executed before the
+        action is called.
+
     ``__after__``
-        Method to run after the action is run. This method will
-        *always* be run after your method, even if it raises an
-        Exception or redirects.
+        This method is called after the action is, unless an unexpected
+        exception was raised. Subclasses of
+        :class:`~webob.exc.HTTPException` (such as those raised by
+        ``redirect_to`` and ``abort``) are expected; e.g. ``__after__``
+        will be called on redirects.
         
     Each action to be called is inspected with :meth:`_inspect_call` so
     that it is only passed the arguments in the Routes match dict that
@@ -68,7 +71,16 @@ class WSGIController(object):
         decorator preserved the function signature.
         
         """
-        argspec = inspect.getargspec(func)
+        # Check to see if the class has a cache of argspecs yet
+        try:
+            cached_argspecs = self.__class__._cached_argspecs
+        except AttributeError:
+            self.__class__._cached_argspecs = cached_argspecs = {}
+        
+        try:
+            argspec = cached_argspecs[func.im_func]
+        except KeyError:
+            argspec = cached_argspecs[func.im_func] = inspect.getargspec(func)
         kargs = self._get_method_args()
                 
         log_debug = self._pylons_log_debug
@@ -140,8 +152,9 @@ class WSGIController(object):
         Routes"""
         log_debug = self._pylons_log_debug
         req = self._py_object.request
-        action = req.environ['pylons.routes_dict'].get('action')
-        if not action:
+        try:
+            action = req.environ['pylons.routes_dict']['action']
+        except KeyError:
             raise Exception("No action matched from Routes, unable to"
                             "determine action dispatch.")
         action_method = action.replace('-', '_')
@@ -170,16 +183,20 @@ class WSGIController(object):
     def __call__(self, environ, start_response):
         """The main call handler that is called to return a response"""
         log_debug = self._pylons_log_debug
-        
+                
         # Keep a local reference to the req/response objects
         self._py_object = environ['pylons.pylons']
 
         # Keep private methods private
-        if environ['pylons.routes_dict'].get('action', '')[:1] in ('_', '-'):
-            if log_debug:
-                log.debug("Action starts with _, private action not allowed. "
-                          "Returning a 404 response")
-            return HTTPNotFound()(environ, start_response)
+        try:
+            if environ['pylons.routes_dict']['action'][:1] in ('_', '-'):
+                if log_debug:
+                    log.debug("Action starts with _, private action not allowed. "
+                              "Returning a 404 response")
+                return HTTPNotFound()(environ, start_response)
+        except KeyError:
+            # The check later will notice that there's no action
+            pass
 
         start_response_called = []
         def repl_start_response(status, headers, exc_info=None):
@@ -207,7 +224,18 @@ class WSGIController(object):
             py_response = self._py_object.response
             # If its not a WSGI response, and we have content, it needs to
             # be wrapped in the response object
-            if hasattr(response, 'wsgi_response'):
+            if isinstance(response, str):
+                if log_debug:
+                    log.debug("Controller returned a string "
+                              ", writing it to pylons.response")
+                py_response.body = py_response.body + response
+            elif isinstance(response, unicode):
+                if log_debug:
+                    log.debug("Controller returned a unicode string "
+                              ", writing it to pylons.response")
+                py_response.unicode_body = py_response.unicode_body + \
+                        response
+            elif hasattr(response, 'wsgi_response'):
                 # It's either a legacy WSGIResponse object, or an exception
                 # that got tossed.
                 if log_debug:
@@ -225,28 +253,21 @@ class WSGIController(object):
                         response.headers.add(name, value)
                     else:
                         response.headers.setdefault(name, value)
-                registry = environ['paste.registry']
-                registry.replace(pylons.response, response)
+                try:
+                    registry = environ['paste.registry']
+                    registry.replace(pylons.response, response)
+                except KeyError:
+                    # Ignore the case when someone removes the registry
+                    pass
                 py_response = response
-            elif isinstance(response, types.GeneratorType):
-                if log_debug:
-                    log.debug("Controller returned a generator, setting it as "
-                              "the pylons.response content")
-                py_response.app_iter = response
             elif response is None:
                 if log_debug:
                     log.debug("Controller returned None")
             else:
                 if log_debug:
-                    log.debug("Assuming controller returned a basestring or "
-                              "buffer, writing it to pylons.response")
-                if isinstance(response, str):
-                    py_response.body = py_response.body + response
-                elif isinstance(response, unicode):
-                    py_response.unicode_body = py_response.unicode_body + \
-                        response
-                else:
-                    py_response.body = response
+                    log.debug("Assuming controller returned an iterable, "
+                              "setting it as pylons.response.app_iter")
+                py_response.app_iter = response
             response = py_response
         
         if hasattr(self, '__after__'):

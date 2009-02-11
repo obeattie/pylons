@@ -63,6 +63,7 @@ class PylonsApp(object):
         self.response_options = config['pylons.response_options']
         self.controller_classes = {}
         self.log_debug = False
+        self.config.setdefault('lang', None)
         
         # Create the redirect function we'll use and save it
         def redirect_to(url):
@@ -79,9 +80,17 @@ class PylonsApp(object):
                 template_root=def_eng['template_root'],
                 **def_eng['template_options'])
             for e in config['buffet.template_engines'][1:]:
-                log.debug("Initializing additional template engine: %s", e['engine'])
-                self.buffet.prepare(e['engine'], template_root=e['template_root'], 
-                    alias=e['alias'], **e['template_options'])
+                log.debug("Initializing additional template engine: %s",
+                          e['engine'])
+                self.buffet.prepare(e['engine'],
+                                    template_root=e['template_root'],
+                                    alias=e['alias'], **e['template_options'])
+        else:
+            self.buffet = None
+        
+        # Cache some options for use during requests
+        self._session_key = self.environ_config.get('session', 'beaker.session')
+        self._cache_key = self.environ_config.get('cache', 'beaker.cache')
     
     def __call__(self, environ, start_response):
         """Setup and handle a web request
@@ -130,8 +139,9 @@ class PylonsApp(object):
             elif response is not None:
                 return response
         
-            raise Exception("No content returned by controller (Did you remember "
-                            "to 'return' it?) in: %r" % controller.__name__)
+            raise Exception("No content returned by controller (Did you "
+                            "remember to 'return' it?) in: %r" %
+                            controller.__name__)
         finally:
             # Help Python collect ram a bit faster by removing the reference 
             # cycle that the pylons object causes
@@ -160,11 +170,11 @@ class PylonsApp(object):
         registry.register(pylons.c, pylons_obj.c)
         registry.register(pylons.translator, pylons_obj.translator)
         
-        if hasattr(pylons_obj, 'buffet'):
+        if self.buffet:
             registry.register(pylons.buffet, self.buffet)
-        if hasattr(pylons_obj, 'session'):
+        if 'session' in pylons_obj.__dict__:
             registry.register(pylons.session, pylons_obj.session)
-        if hasattr(pylons_obj, 'cache'):
+        if 'cache' in pylons_obj.__dict__:
             registry.register(pylons.cache, pylons_obj.cache)
         
         if 'routes.url' in environ:
@@ -198,7 +208,7 @@ class PylonsApp(object):
         pylons_obj.g = pylons_obj.app_globals = self.globals
         pylons_obj.h = self.helpers
         
-        if hasattr(self, 'buffet'):
+        if self.buffet:
             pylons_obj.buffet = self.buffet
         
         environ['pylons.pylons'] = pylons_obj
@@ -206,7 +216,8 @@ class PylonsApp(object):
         environ['pylons.environ_config'] = self.environ_config
         
         # Setup the translator object
-        pylons_obj.translator = _get_translator(self.config.get('lang'))
+        lang = self.config['lang']
+        pylons_obj.translator = _get_translator(lang, pylons_config=self.config)
         
         if self.config['pylons.strict_c']:
             c = ContextObj()
@@ -215,14 +226,10 @@ class PylonsApp(object):
         pylons_obj.c = c
         
         econf = self.config['pylons.environ_config']
-        if econf.get('session') and econf['session'] in environ:
-            pylons_obj.session = environ[econf['session']]
-        elif 'beaker.session' in environ:
-            pylons_obj.session = environ['beaker.session']
-        if econf.get('cache') and econf['cache'] in environ:
-            pylons_obj.cache = environ[econf['cache']]
-        elif 'beaker.cache' in environ:
-            pylons_obj.cache = environ['beaker.cache']
+        if self._session_key in environ:
+            pylons_obj.session = environ[self._session_key]
+        if self._cache_key in environ:
+            pylons_obj.cache = environ[self._cache_key]
         
         # Load the globals with the registry if around
         if 'paste.registry' in environ:
@@ -298,10 +305,8 @@ class PylonsApp(object):
                 log.debug("No controller found, returning 404 HTTP Not Found")
             return HTTPNotFound()(environ, start_response)
 
-        match = environ['pylons.routes_dict']
-        
         # If it's a class, instantiate it
-        if inspect.isclass(controller):
+        if hasattr(controller, '__bases__'):
             if log_debug:
                 log.debug("Controller appears to be a class, instantiating")
             controller = controller()

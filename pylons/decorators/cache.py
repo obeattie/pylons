@@ -2,14 +2,15 @@
 import inspect
 import logging
 import time
-
-from decorator import decorator
-from paste.deploy.converters import asbool
-
 try:
     set
 except NameError:
     from sets import Set as set
+
+from decorator import decorator
+from paste.deploy.converters import asbool
+
+from pylons.decorators.util import get_pylons
     
 log = logging.getLogger(__name__)
 
@@ -54,17 +55,17 @@ def beaker_cache(key="cache_default", expire="never", type=None,
 
     def wrapper(func, *args, **kwargs):
         """Decorator wrapper"""
-        self = args[0]
+        pylons = get_pylons(args)
         log.debug("Wrapped with key: %s, expire: %s, type: %s, query_args: %s",
                   key, expire, type, query_args)
-        enabled = self._py_object.config.get("cache_enabled", "True")
+        enabled = pylons.config.get("cache_enabled", "True")
         if not asbool(enabled):
             log.debug("Caching disabled, skipping cache lookup")
             return func(*args, **kwargs)
 
         if key:
             if query_args:
-                key_dict = dict(self._py_object.request.GET)
+                key_dict = pylons.request.GET.mixed()
             else:
                 key_dict = kwargs.copy()
                 key_dict.update(_make_dict_from_args(func, args))
@@ -77,12 +78,15 @@ def beaker_cache(key="cache_default", expire="never", type=None,
         else:
             key_dict = None
 
+        self = None
+        if args:
+            self = args[0]
         namespace, cache_key = create_cache_key(func, key_dict, self)
 
         if type:
             b_kwargs['type'] = type
             
-        my_cache = self._py_object.cache.get_cache(namespace, **b_kwargs)
+        my_cache = pylons.cache.get_cache(namespace, **b_kwargs)
             
         if expire == "never":
             cache_expire = None
@@ -93,7 +97,7 @@ def beaker_cache(key="cache_default", expire="never", type=None,
             log.debug("Creating new cache copy with key: %s, type: %s",
                       cache_key, type)
             result = func(*args, **kwargs)
-            glob_response = self._py_object.response
+            glob_response = pylons.response
             headers = glob_response.headerlist
             status = glob_response.status
             full_response = dict(headers=headers, status=status,
@@ -101,10 +105,12 @@ def beaker_cache(key="cache_default", expire="never", type=None,
             return full_response
         
         response = my_cache.get_value(cache_key, createfunc=create_func,
-                                     expiretime=cache_expire, starttime=starttime)
+                                      expiretime=cache_expire,
+                                      starttime=starttime)
         
-        glob_response = self._py_object.response
-        glob_response.headerlist = [header for header in response['headers'] if header[0].lower() in cache_headers]
+        glob_response = pylons.response
+        glob_response.headerlist = [header for header in response['headers']
+                                    if header[0].lower() in cache_headers]
         glob_response.status = response['status']
 
         return response['content']
@@ -120,18 +126,24 @@ def create_cache_key(func, key_dict=None, self=None):
         cache.get_cache(namespace).remove(key)
             
     """
+    kls = None
+    if hasattr(func, 'im_func'):
+        kls = func.im_class
+        func = func.im_func
+        cache_key = func.__name__
+    else:
+        cache_key = func.__name__
     if key_dict:
-        cache_key = " ".join(["%s=%s" % (k, v) for k, v in key_dict.iteritems()])
-    else:
-        if hasattr(self, 'im_func'):
-            cache_key = func.im_func.__name__
-        else:
-            cache_key = func.__name__
+        cache_key += " " + " ".join(["%s=%s" % (k, v) for k, v
+                                     in key_dict.iteritems()])
+
+    if not kls and self:
+        kls = getattr(self, '__class__', None)
     
-    if self:
-        return '%s.%s' % (func.__module__, self.__class__.__name__), cache_key
+    if kls:
+        return '%s.%s' % (func.__module__, kls.__name__), cache_key
     else:
-        return '%s.%s' % (func.__module__, func.im_class.__name__), cache_key
+        return func.__module__, cache_key
 
 def _make_dict_from_args(func, args):
     """Inspects function for name of args"""

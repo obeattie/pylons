@@ -3,8 +3,8 @@
 Render functions and helpers
 ============================
 
-:mod:`pylons.templating` includes several basic render functions, 
-:func:`render_mako`, :func:`render_genshi` and :func:`render_jinja`
+:mod:`pylons.templating` includes several basic render functions,
+:func:`render_mako`, :func:`render_genshi` and :func:`render_jinja2`
 that render templates from the file-system with the assumption that
 variables intended for the will be attached to :data:`tmpl_context`
 (hereafter referred to by its short name of :data:`c` which it is
@@ -19,7 +19,9 @@ Usage
 
 Generally, one of the render functions will be imported in the
 controller. Variables intended for the template are attached to the
-:data:`c` object.
+:data:`c` object. The render functions return unicode (they actually
+return :class:`~webhelpers.html.literal` objects, a subclass of
+unicode).
 
 .. admonition :: Tip
     
@@ -37,13 +39,12 @@ Example of rendering a template with some variables::
 
     from sampleproject.lib.base import BaseController
 
-
     class SampleController(BaseController):
 
         def index(self):
             c.first_name = "Joe"
             c.last_name = "Smith"
-            return render('/some/template.html')
+            return render('/some/template.mako')
 
 And the accompanying Mako template:
 
@@ -59,7 +60,7 @@ Template Globals
 
 Templates rendered in Pylons should include the default Pylons globals
 as the :func:`render_mako`, :func:`render_genshi` and
-:func:`render_jinja` functions. The full list of Pylons globals that
+:func:`render_jinja2` functions. The full list of Pylons globals that
 are included in the template's namespace are:
 
 - :term:`c` -- Template context object
@@ -75,7 +76,7 @@ are included in the template's namespace are:
   object for this request
 - :class:`session` -- Pylons session object (unless Sessions are
   removed)
-- :method:`~routes.util.URLGenerator.url` -- Routes url generator
+- :class:`url <routes.util.URLGenerator>` -- Routes url generator
   object
 - :class:`translator` -- Gettext translator object configured for
   current locale
@@ -132,10 +133,11 @@ except ImportError:
 import pkg_resources
 
 import pylons
+import pylons.legacy
 from webhelpers.html import literal
 
 __all__ = ['Buffet', 'MyghtyTemplatePlugin', 'render', 'render_genshi', 
-           'render_jinja', 'render_mako', 'render_response']
+           'render_jinja2', 'render_mako', 'render_response']
 
 PYLONS_VARS = ['c', 'config', 'g', 'h', 'render', 'request', 'session',
                'translator', 'ungettext', '_', 'N_']
@@ -159,7 +161,7 @@ def pylons_globals():
     """
     conf = pylons.config._current_obj()
     c = pylons.tmpl_context._current_obj()
-    g=conf.get('pylons.app_globals') or conf['pylons.g']
+    g = conf.get('pylons.app_globals') or conf['pylons.g']
     pylons_vars = dict(
         c=c,
         tmpl_context=c,
@@ -266,7 +268,7 @@ def render_mako(template_name, extra_vars=None, cache_key=None,
         # Grab a template reference
         template = globs['app_globals'].mako_lookup.get_template(template_name)
         
-        return literal(template.render(**globs))
+        return literal(template.render_unicode(**globs))
     
     return cached_template(template_name, render_template, cache_key=cache_key,
                            cache_type=cache_type, cache_expire=cache_expire)
@@ -299,9 +301,10 @@ def render_mako_def(template_name, def_name, cache_key=None,
         globs.update(pylons_globals())
 
         # Grab a template reference
-        template = globs['app_globals'].mako_lookup.get_template(template_name).get_def(def_name)
+        template = globs['app_globals'].mako_lookup.get_template(
+            template_name).get_def(def_name)
         
-        return literal(template.render(**globs))
+        return literal(template.render_unicode(**globs))
     
     return cached_template(template_name, render_template, cache_key=cache_key,
                            cache_type=cache_type, cache_expire=cache_expire)
@@ -327,16 +330,17 @@ def render_genshi(template_name, extra_vars=None, cache_key=None,
         # Grab a template reference
         template = globs['app_globals'].genshi_loader.load(template_name)
         
-        return literal(template.generate(**globs).render(method=method))
+        return literal(template.generate(**globs).render(method=method,
+                                                         encoding=None))
     
     return cached_template(template_name, render_template, cache_key=cache_key,
                            cache_type=cache_type, cache_expire=cache_expire,
                            ns_options=('method'), method=method)
 
 
-def render_jinja(template_name, extra_vars=None, cache_key=None, 
+def render_jinja2(template_name, extra_vars=None, cache_key=None, 
                  cache_type=None, cache_expire=None):
-    """Render a template with Jinja
+    """Render a template with Jinja2
 
     Accepts the cache options ``cache_key``, ``cache_type``, and
     ``cache_expire``.
@@ -352,7 +356,7 @@ def render_jinja(template_name, extra_vars=None, cache_key=None,
 
         # Grab a template reference
         template = \
-            globs['app_globals'].jinja_env.get_template(template_name)
+            globs['app_globals'].jinja2_env.get_template(template_name)
 
         return literal(template.render(**globs))
 

@@ -10,12 +10,13 @@ from paste.recursive import RecursiveMiddleware
 from paste.urlparser import StaticURLParser
 from weberror.evalexception import EvalException
 from weberror.errormiddleware import ErrorMiddleware
-from webob import Request
+from webob import Request, Response
 from webhelpers.html import literal
 
 import pylons
 import pylons.legacy
 from pylons.error import template_error_formatters
+from pylons.util import call_wsgi_application
 
 __all__ = ['ErrorDocuments', 'ErrorHandler', 'StaticJavascripts',
            'error_document_template', 'error_mapper', 'footer_html',
@@ -29,7 +30,7 @@ head_html = """\
 <link rel="stylesheet" href="{{prefix}}/media/pylons/style/itraceback.css" \
 type="text/css" media="screen" />"""
 
-footer_html ="""\
+footer_html = """\
 <script src="{{prefix}}/media/pylons/javascripts/traceback.js"></script>
 <script>
 var TRACEBACK = {
@@ -49,7 +50,7 @@ var TRACEBACK = {
 </div>
 <div class="clearfix">&nbsp;</div>
 <div class="overviewtab">
-<h3>Looking for help?</h3>
+<b>Looking for help?</b>
 
 <p>Here are a few tips for troubleshooting if the above traceback isn't
 helping out.</p>
@@ -84,7 +85,7 @@ PylonsHQ website in this browser.</p>
 
 </div>
 <div id="pylons_logo">\
-<img src="{{prefix}}/media/pylons/img/pylons-tower120.png" /></div>
+<img src="{{prefix}}/media/pylons/img/pylons-powered-02.png" /></div>
 <div class="credits">Pylons version %s</div>"""
 
 class StaticJavascripts(object):
@@ -129,7 +130,7 @@ def ErrorHandler(app, global_conf, **errorware):
 
     if asbool(global_conf.get('debug')):
         footer = footer_html % (pylons.config.get('traceback_host', 
-                                                  'beta.pylonshq.com'),
+                                                  'pylonshq.com'),
                                 pylons.__version__)
         py_media = dict(pylons=media_path)
         app = EvalException(app, global_conf, 
@@ -177,7 +178,8 @@ class StatusCodeRedirect(object):
     ``environ['pylons.status_code_redirect'] = True`` in the application.
     
     """
-    def __init__(self, app, errors=(400, 401, 403, 404), path='/error/document'):
+    def __init__(self, app, errors=(400, 401, 403, 404),
+                 path='/error/document'):
         """Initialize the ErrorRedirect
         
         ``errors``
@@ -189,21 +191,25 @@ class StatusCodeRedirect(object):
         
         """
         self.app = app
-        self.errors = errors
         self.error_path = path
+        
+        # Transform errors to str for comparison
+        self.errors = tuple([str(x) for x in errors])
     
     def __call__(self, environ, start_response):
-        req = Request(environ)
-        new_req = req.copy_get()
-        resp = orig_resp = req.get_response(self.app, catch_exc_info=True)
-        if resp.status_int in self.errors and \
-           'pylons.status_code_redirect' not in environ and self.error_path:
-            new_req.path_info = self.error_path
-            new_req.environ['pylons.original_response'] = resp
-            new_req.environ['pylons.original_request'] = req
-            resp = new_req.get_response(self.app, catch_exc_info=True)
-            resp.status = orig_resp.status
-        return resp(environ, start_response)
+        status, headers, app_iter, exc_info = call_wsgi_application(
+            self.app, environ, catch_exc_info=True)
+        if status[:3] in self.errors and \
+            'pylons.status_code_redirect' not in environ and self.error_path:
+            environ['PATH_INFO'] = self.error_path
+            
+            # Create a response object
+            environ['pylons.original_response'] = Response(
+                status=status, headerlist=headers, app_iter=app_iter)
+            return self.app(environ, start_response)
+        else:
+            start_response(status, headers, exc_info)
+            return app_iter
 
 
 def ErrorDocuments(app, global_conf=None, mapper=None, **kw):
@@ -226,65 +232,11 @@ error_document_template = literal("""\
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
 <head>
  <title>Server Error %(code)s</title>
- 
-<style type="text/css">
-body {
-  font-family: Helvetica, sans-serif;
-}
-
-table {
-  width: 100%%;
-}
-
-tr.header {
-  background-color: #006;
-  color: #fff;
-}
-
-tr.even {
-  background-color: #ddd;
-}
-
-table.variables td {
-  verticle-align: top;
-  overflow: auto;
-}
-
-a.button {
-  background-color: #ccc;
-  border: 2px outset #aaa;
-  color: #000;
-  text-decoration: none;
-}
-
-a.button:hover {
-  background-color: #ddd;
-}
-
-code.source {
-  color: #006;
-}
-
-a.switch_source {
-  color: #0990;
-  text-decoration: none;
-}
-
-a.switch_source:hover {
-  background-color: #ddd;
-}
-
-.source-highlight {
-  background-color: #ff9;
-}
-
-</style>
-
 <!-- CSS Imports -->
-<link rel="stylesheet" href="%(prefix)s/error/style/orange.css" type="text/css" media="screen" />
+<link rel="stylesheet" href="%(prefix)s/error/style/black.css" type="text/css" media="screen" />
 
 <!-- Favorite Icons -->
-<link rel="icon" href="%(prefix)s/error/img/icon-16.png" type="image/png" />
+<link rel="icon" href="%(prefix)s/error/img/favicon.ico" type="image/png" />
 
 <style type="text/css">
         .red {
@@ -294,64 +246,11 @@ a.switch_source:hover {
             font-weight: bold;
         }
 </style>
-
 </head>
 
-<body id="documentation">
-<!-- We are only using a table to ensure old browsers see the message correctly -->
-
-<noscript>
-<div style="border-bottom: 1px solid #808080">
-<div style="border-bottom: 1px solid #404040">
-<table width="100%%" border="0" cellpadding="0" bgcolor="#FFFFE1"><tr><td valign="middle"><img src="%(prefix)s/error/img/warning.gif" alt="Warning" /></td><td>&nbsp;</td><td><span style="padding: 0px; margin: 0px; font-family: Tahoma, sans-serif; font-size: 11px">Warning, your browser does not support JavaScript so you will not be able to use the interactive debugging on this page.</span></td></tr></table>
-</div>
-</div>
-</noscript>
-    
-    <!-- Top anchor -->
-    <a name="top"></a>
-    
-    <!-- Logo -->
-    <h1 id="logo"><a class="no-underline" href="http://www.pylonshq.com"><img class="no-border" src="%(prefix)s/error/img/logo.gif" alt="Pylons" title="Pylons"/></a></h1>
-    <p class="invisible"><a href="#content">Skip to content</a></p>
-
-    <!-- Main Content -->
-
-    <div id="nav-bar">
-
-        <!-- Section Navigation -->
-        <h4 class="invisible">Section Links</h4>
-
-            <ul id="navlist">
-                <li class="active"><a href="#" accesskey="1" class="active">Error %(code)s</a></li>
-            </ul>
-    </div>
-    <div id="main-content">
-    
-        <div class="hr"><hr class="hr" /></div> 
-
-        <div class="content-padding">
-            
-            <div id="main_data">
-                <div style="float: left; width: 100%%; padding-bottom: 20px;">
-                <h1 class="first"><a name="content"></a>Error %(code)s</h1>
-                </div>
-                
-                %(message)s
-                
-            </div>
-
-        </div>
-        
-        
-            <!-- Footer -->
-
-        <div class="hr"><hr class="clear" /></div>
-    </div>
-    
-    <div style=" background: #FFFF99; padding: 10px 10px 10px 6%%; clear: both;">
-        The Pylons Team | 
-        <a href="#top" accesskey="9" title="Return to the top of the navigation links">Top</a>
+<body>
+    <div id="container">
+        %(message)s
     </div>
 </body>
 </html>

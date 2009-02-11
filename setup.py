@@ -1,3 +1,5 @@
+import sys
+
 try:
     from setuptools import setup, find_packages
 except ImportError:
@@ -5,7 +7,11 @@ except ImportError:
     use_setuptools()
     from setuptools import setup, find_packages
 
-version = '0.9.7rc4'
+version = '0.9.7'
+
+tests_require = ['nose']
+if not sys.platform.startswith('java'):
+    tests_require.extend(['Genshi', 'Jinja2'])
 
 setup(
     name="Pylons",
@@ -66,17 +72,17 @@ the `Pylons download page <http://pylonshq.com/download/>`_ .
     author='Ben Bangert, Philip Jenvey, James Gardner',
     author_email='ben@groovie.org, pjenvey@underboss.org',
     url='http://www.pylonshq.com/',
-    packages=find_packages(exclude=['ez_setup']),
+    packages=find_packages(exclude=['ez_setup', 'tests', 'tests.*']),
     zip_safe=False,
     include_package_data=True,
     test_suite='nose.collector',
-    tests_require=['nose'],
+    tests_require=tests_require,
     install_requires=[
-        "Routes>=1.10.1", "WebHelpers>=0.6.1", "Beaker>=1.0.3",
-        "Paste>=1.7.2", "PasteDeploy>=1.3.2", "PasteScript>=1.7.2",
-        "FormEncode>=1.1", "simplejson>=2.0.3", "decorator>=2.2.0",
-        "nose>=0.10.4", "Mako>=0.2.2", "WebOb>=0.9.4", "WebError>=0.9.1",
-        "Tempita>=0.2",
+        "Routes>=1.10.1", "WebHelpers>=0.6.3", "Beaker>=1.1.3",
+        "Paste>=1.7.2", "PasteDeploy>=1.3.2", "PasteScript>=1.7.3",
+        "FormEncode>=1.2.1", "simplejson>=2.0.6", "decorator>=2.3.2",
+        "nose>=0.10.4", "Mako>=0.2.4", "WebOb>=0.9.5", "WebError>=0.10.1",
+        "WebTest>=1.1", "Tempita>=0.2",
     ],
     dependency_links=[
         "http://www.pylonshq.com/download/0.9.7"
@@ -93,11 +99,12 @@ the `Pylons download page <http://pylonshq.com/download/>`_ .
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
     extras_require = {
-        'cheetah':["Cheetah>=1.0", "TurboCheetah>=0.9.5"],
-        'myghty':["Myghty>=1.1"],
-        'kid':["kid>=0.9", "TurboKid>=0.9.1"],
-        'genshi':["Genshi>=0.4.4"],
-        'full':[
+        'cheetah': ["Cheetah>=1.0", "TurboCheetah>=0.9.5"],
+        'myghty': ["Myghty>=1.1"],
+        'kid': ["kid>=0.9", "TurboKid>=0.9.1"],
+        'genshi': ["Genshi>=0.4.4"],
+        'jinja2': ['Jinja2'],
+        'full': [
             "docutils>=0.4", "elementtree>=1.2.6",
             "Pygments>=0.7", "Cheetah>=1.0",
             "TurboCheetah>=0.9.5", "kid>=0.9", "TurboKid>=0.9.1",
