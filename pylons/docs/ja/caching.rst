@@ -162,7 +162,12 @@ cache オブジェクトを使う
 
 
 .. code-block:: python
-
+    
+    # Add to existing imports
+    from pylons import cache
+    
+    
+    # Under the controller class
     def some_action(self, day):
         # hypothetical action that uses a 'day' variable as its key
 
@@ -172,12 +177,12 @@ cache オブジェクトを使う
 
         # Get a cache for a specific namespace, you can name it whatever
         # you want, in this case its 'my_function'
-        mycache = cache.get_cache('my_function')
+        mycache = cache.get_cache('my_function', type="memory")
 
         # Get the value, this will create the cache copy the first time
         # and any time it expires (in seconds, so 3600 = one hour)
         c.myvalue = mycache.get_value(key=day, createfunc=expensive_function,
-                                      type="memory", expiretime=3600)
+                                      expiretime=3600)
 
         return render('/some/template.myt')
 
@@ -233,12 +238,13 @@ cache オブジェクトを使う
     introduced in Pylons 0.9.7
 
 
-.. All `render` commands have caching functionality built in. To use it,
-.. merely add the appropriate cache keyword to the `render` call.
+.. All :func:`render <pylons.templating.render_mako>` commands have
+.. caching functionality built in. To use it, merely add the appropriate
+.. cache keyword to the render call.
 
-すべての `render` コマンドは、キャッシュ機能を内蔵しています。それを使
-用するには、単に `render` 呼び出しに適切なキャッシュキーワードを加えて
-ください。
+すべての :func:`render <pylons.templating.render_mako>` コマンドは、
+キャッシュ機能を内蔵しています。それを使用するには、単に render 呼び出
+しに適切なキャッシュキーワードを加えてください。
 
 
 .. code-block:: python
@@ -268,24 +274,17 @@ cache オブジェクトを使う
 キャッシュデコレータを使う
 --------------------------
 
-.. Pylons also provides the `beaker_cache
-.. <http://pylonshq.com/docs/module-pylons.decorators.cache.html#beaker_cache>`_
+.. Pylons also provides the :func:`~pylons.decorators.cache.beaker_cache`
 .. decorator for caching in `pylons.cache` the results of a completed
 .. function call (memoizing).
 
 Pylons はまた、関数呼び出し全体の結果をキャッシュする (memoizing) ため
-に、 `beaker_cache
-<http://pylonshq.com/docs/module-pylons.decorators.cache.html#beaker_cache>`_
-デコレータを `pylons.cache` で提供します。
-
-
-.. warning::
-
-    ambiguous with respect to 'as does the render function'
+に、 `pylons.cache` で :func:`~pylons.decorators.cache.beaker_cache` デ
+コレータを提供します。
 
 
 .. The cache decorator takes the same cache arguments (minus their
-.. `cache_` prefix), as does the `render` function.
+.. `cache_` prefix), as the `render` function does.
 
 beaker_cache デコレータは、 `render` 関数と同じ (それらから `cache_` プ
 リフィックスを除いた) キャッシュ引数を取ります。
@@ -322,17 +321,45 @@ beaker_cache デコレータは、 `render` 関数と同じ (それらから `ca
 リ引数を合成したものを使用することができます。
 
 
-.. warning::
-
-    ambiguous - are customizations in addition or in place of the
-    above key-using options?
-
-
 .. The cache key can be further customized via the `key` argument.
 
 `key` 引数でさらにキャッシュキーをカスタマイズすることができます。
 
 
+Caching Arbitrary Functions
+---------------------------
+
+.. Arbitrary functions can use the
+.. :func:`~pylons.decorators.cache.beaker_cache` decorator, but should
+.. include an additional option. Since the decorator caches the
+.. :term:`response` object, it's unlikely the status code and headers for
+.. non-controller methods should be cached. To avoid caching that data,
+.. the cache_response keyword argument should be set to false.
+
+任意の関数で :func:`~pylons.decorators.cache.beaker_cache` デコレータを
+使用できますが、追加のオプションを渡す必要があります。デコレーターは
+:term:`response` オブジェクトをキャッシュするため、非コントローラメソッ
+ドでステータスコードやヘッダーをキャッシュしなければならないことはほと
+んどありません。そのようなデータをキャッシュするのを避けるために、
+cache_response キーワード引数は false に設定されるべきです。
+
+
+.. code-block:: python
+    
+    from pylons.decorators.cache import beaker_cache
+    
+    @beaker_cache(expire=600, cache_response=False)
+    def generate_data():
+        # do expensive data generation
+        return data
+
+.. warning::
+    
+    When caching arbitrary functions, the ``query_args`` argument should not
+    be used since the result of arbitrary functions shouldn't depend on
+    the request parameters.
+
+ 
 .. ETag Caching
 
 ETag キャッシュ
@@ -355,24 +382,29 @@ ETag キャッシュはブラウザにヘッダーを送ることに頼ってい
 他のキャッシュ機構とはやや異なる方法で働きます。
 
 
-.. The :func:`etag_cache` function will set the proper HTTP headers if
-.. the browser doesn't yet have a copy of the page. Otherwise, a 304 HTTP
-.. Exception will be thrown that is then caught by Paste middleware and
-.. turned into a proper 304 response to the browser. This will cause the
-.. browser to use its own locally-cached copy.
+.. The :func:`~pylons.controllers.util.etag_cache` function will set the
+.. proper HTTP headers if the browser doesn't yet have a copy of the
+.. page. Otherwise, a 304 HTTP Exception will be thrown that is then
+.. caught by Paste middleware and turned into a proper 304 response to
+.. the browser. This will cause the browser to use its own locally-cached
+.. copy.
 
-ブラウザにページのコピーがまだなければ、 :func:`etag_cache` 関数は適切
-な HTTP ヘッダがセットされた Response オブジェクトを返します。そうでな
-ければ 304 HTTP Exception が投げられ、これは Paste ミドルウェアによって
-捕捉されてブラウザへの適切な 304 レスポンスになります。これにより、ブラ
-ウザはそれ自身の持つコピーを使用するようになります。
+ブラウザにページのコピーがまだなければ、
+:func:`~pylons.controllers.util.etag_cache` 関数は適切な HTTP ヘッダが
+セットされた Response オブジェクトを返します。そうでなければ 304 HTTP
+Exception が投げられ、これは Paste ミドルウェアによって捕捉されてブラウ
+ザへの適切な 304 レスポンスになります。これにより、ブラウザはそれ自身の
+持つコピーを使用するようになります。
 
 
-.. :func:`etag_cache` returns `pylons.response` for legacy purposes
-.. (`pylons.response` should be used directly instead).
+.. :func:`~pylons.controllers.util.etag_cache` returns
+.. :class:`~pylons.controllers.util.Response` for legacy purposes
+.. (:class:`~pylons.controllers.util.Response` should be used directly
+.. instead).
 
-:func:`etag_cache` は レガシー目的のために `pylons.response` を返します
-(代わりに `pylons.response` を直接使用すべきです)。
+:func:`~pylons.controllers.util.etag_cache` は レガシー目的のために
+:class:`~pylons.controllers.util.Response` を返します (代わりに
+:class:`~pylons.controllers.util.Response` を直接使用すべきです)。
 
 
 .. ETag-based caching requires a single key which is sent in the ETag
