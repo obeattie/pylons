@@ -1,6 +1,5 @@
 from pylons import app_globals as g
 from pylons.decorators.cache import beaker_cache
-from pylons.templating import render_response
 from projectname.lib.base import BaseController
 
 class CacheController(BaseController):
@@ -29,4 +28,3 @@ class CacheController(BaseController):
         g.counter += 1
         return 'Counter=%s, id=%s' % (g.counter, id)
     test_keyslist_cache_decorator = beaker_cache(key=["id", "id2"])(test_keyslist_cache_decorator)
-    
