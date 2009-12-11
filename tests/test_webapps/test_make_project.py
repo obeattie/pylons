@@ -179,6 +179,7 @@ def do_genshi():
     copydict = {
         'testgenshi.html':'projectname/templates/testgenshi.html',
         'middleware_def_engine.py':'projectname/config/middleware.py',
+        'environment_def_engine.py':'projectname/config/environment.py',
         'functional_sample_controller_sample2.py':'projectname/tests/functional/test_sample2.py'
     }
     copydict.update(reset)
@@ -325,6 +326,8 @@ def test_project_do_two_engines():
     do_two_engines()
 
 def test_project_do_jinja2():
+    if is_jython:
+        raise SkipTest('Jython does not currently support Jinja2')
     do_jinja2()
 
 def test_project_do_xmlrpc():
