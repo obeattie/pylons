@@ -14,9 +14,9 @@ Functions available:
 :func:`mimetype`, :func:`redirect`, and :func:`redirect_to`
 """
 import base64
+import binascii
 import hmac
 import logging
-import mimetypes
 try:
     import cPickle as pickle
 except ImportError:
@@ -45,11 +45,7 @@ class Request(WebObRequest):
     adds defaults, along with several methods for backwards 
     compatibility with paste.wsgiwrappers.WSGIRequest.
     
-    """
-    charset = 'utf-8'
-    unicode_errors = 'replace'
-    language = 'en-us'
-    
+    """    
     def determine_browser_charset(self):
         """Legacy method to return the
         :attr:`webob.Request.accept_charset`"""
@@ -75,16 +71,14 @@ class Request(WebObRequest):
         """
         cookie = self.str_cookies.get(name)
         if not cookie:
-            return None
+            return
         try:
             sig, pickled = cookie[:40], base64.decodestring(cookie[40:])
-        except:
+        except binascii.Error:
             # Badly formed data can make base64 die
-            return None
+            return
         if hmac.new(secret, pickled, sha1).hexdigest() == sig:
             return pickle.loads(pickled)
-        else:
-            return None
 
 
 class Response(WebObResponse):
@@ -95,8 +89,6 @@ class Response(WebObResponse):
     backwards compatibility with paste.wsgiwrappers.WSGIResponse.
     
     """
-    default_content_type = 'text/html'
-    errors = 'strict'
     content = WebObResponse.body
     
     def determine_charset(self):
@@ -127,6 +119,7 @@ class Response(WebObResponse):
         sig = hmac.new(secret, pickled, sha1).hexdigest()
         self.set_cookie(name, sig + base64.encodestring(pickled), **kwargs)
 
+
 def etag_cache(key=None):
     """Use the HTTP Entity Tag cache for Browser side caching
     
@@ -155,10 +148,10 @@ def etag_cache(key=None):
         exception if the ETag recieved matches the key provided.
     
     """
-    if_none_match = pylons.request.environ.get('HTTP_IF_NONE_MATCH', None)
+    key = str(key)
     response = pylons.response._current_obj()
     response.headers['ETag'] = key
-    if str(key) == if_none_match:
+    if key in pylons.request.if_none_match:
         log.debug("ETag match, returning 304 HTTP Not Modified Response")
         response.headers.pop('Content-Type', None)
         response.headers.pop('Cache-Control', None)
@@ -225,7 +218,15 @@ def redirect_to(*args, **kargs):
     the redirect, i.e.::
 
         redirect_to(controller='home', action='index', _code=303)
+    
+    .. warning::
+
+        This function is deprecated. Pass the result of :func:`url` to
+        :func:`redirect` instead.
 
     """
+    import warnings
+    warnings.warn('redirect_to is deprecated, use redirect(url(*args, '
+                  '**kwargs)) instead.', DeprecationWarning, 2)
     code = kargs.pop('_code', 302)
     return redirect(url_for(*args, **kargs), code)

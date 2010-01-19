@@ -6,7 +6,6 @@ by Paste, though any WSGI server could create and call the WSGI app as
 well.
 
 """
-import inspect
 import logging
 import sys
 
@@ -15,7 +14,6 @@ from routes import request_config
 from webob.exc import HTTPFound, HTTPNotFound
 
 import pylons
-import pylons.legacy
 import pylons.templating
 from pylons.controllers.util import Request, Response
 from pylons.i18n.translation import _get_translator
@@ -45,7 +43,7 @@ class PylonsApp(object):
     approach.
     
     """
-    def __init__(self, **kwargs):
+    def __init__(self, config=None, **kwargs):
         """Initialize a base Pylons WSGI application
         
         The base Pylons WSGI application requires several keywords, the
@@ -53,7 +51,7 @@ class PylonsApp(object):
         provided then h will be None.
         
         """
-        self.config = config = pylons.config._current_obj()
+        self.config = config = config or pylons.config._current_obj()
         package_name = config['pylons.package']
         self.helpers = config['pylons.h']
         self.globals = config.get('pylons.app_globals') or config['pylons.g']
@@ -63,13 +61,14 @@ class PylonsApp(object):
         self.response_options = config['pylons.response_options']
         self.controller_classes = {}
         self.log_debug = False
+        self.config.setdefault('lang', None)
         
         # Create the redirect function we'll use and save it
         def redirect_to(url):
             log.debug("Raising redirect to %s", url)
             raise HTTPFound(location=url)
         self.redirect_to = redirect_to
-        
+
         # Initialize Buffet and all our template engines, default engine is the
         # first in the template_engines list
         if config.get('buffet.template_engines'):
@@ -84,6 +83,12 @@ class PylonsApp(object):
                 self.buffet.prepare(e['engine'],
                                     template_root=e['template_root'],
                                     alias=e['alias'], **e['template_options'])
+        else:
+            self.buffet = None
+                        
+        # Cache some options for use during requests
+        self._session_key = self.environ_config.get('session', 'beaker.session')
+        self._cache_key = self.environ_config.get('cache', 'beaker.cache')
     
     def __call__(self, environ, start_response):
         """Setup and handle a web request
@@ -157,18 +162,22 @@ class PylonsApp(object):
         registry.register(pylons.request, pylons_obj.request)
         
         registry.register(pylons.app_globals, self.globals)
+        registry.register(pylons.g, self.globals)
         registry.register(pylons.config, self.config)
         registry.register(pylons.h, self.helpers or \
                           pylons.legacy.load_h(self.package_name))
-        registry.register(pylons.c, pylons_obj.c)
+        registry.register(pylons.tmpl_context, pylons_obj.tmpl_context)
+        registry.register(pylons.c, pylons_obj.tmpl_context)
         registry.register(pylons.translator, pylons_obj.translator)
-        
-        if hasattr(pylons_obj, 'buffet'):
-            registry.register(pylons.buffet, self.buffet)
-        if hasattr(pylons_obj, 'session'):
+
+        if self.buffet:
+            registry.register(pylons.buffet, self.buffet)        
+        if 'session' in pylons_obj.__dict__:
             registry.register(pylons.session, pylons_obj.session)
-        if hasattr(pylons_obj, 'cache'):
+        if 'cache' in pylons_obj.__dict__:
             registry.register(pylons.cache, pylons_obj.cache)
+        elif 'cache' in pylons_obj.app_globals.__dict__:
+            registry.register(pylons.cache, pylons_obj.app_globals.cache)
         
         if 'routes.url' in environ:
             registry.register(pylons.url, environ['routes.url'])
@@ -184,9 +193,13 @@ class PylonsApp(object):
         if self.log_debug:
             log.debug("Setting up Pylons stacked object globals")
         
+        
         # Setup the basic pylons global objects
-        req = Request(environ)
-        req.language = self.request_options['language']
+        req_options = self.request_options
+        req = Request(environ, charset=req_options['charset'],
+                      unicode_errors=req_options['errors'],
+                      decode_param_names=req_options['decode_param_names'])
+        req.language = req_options['language']
         
         response = Response(
             content_type=self.response_options['content_type'],
@@ -198,10 +211,10 @@ class PylonsApp(object):
         pylons_obj.config = self.config
         pylons_obj.request = req
         pylons_obj.response = response
-        pylons_obj.g = pylons_obj.app_globals = self.globals
+        pylons_obj.app_globals = self.globals
         pylons_obj.h = self.helpers
-        
-        if hasattr(self, 'buffet'):
+
+        if self.buffet:
             pylons_obj.buffet = self.buffet
         
         environ['pylons.pylons'] = pylons_obj
@@ -209,23 +222,20 @@ class PylonsApp(object):
         environ['pylons.environ_config'] = self.environ_config
         
         # Setup the translator object
-        pylons_obj.translator = _get_translator(self.config.get('lang'))
+        lang = self.config['lang']
+        pylons_obj.translator = _get_translator(lang, pylons_config=self.config)
         
-        if self.config['pylons.strict_c']:
-            c = ContextObj()
+        if self.config['pylons.strict_tmpl_context']:
+            tmpl_context = ContextObj()
         else:
-            c = AttribSafeContextObj()
-        pylons_obj.c = c
+            tmpl_context = AttribSafeContextObj()
+        pylons_obj.tmpl_context = pylons_obj.c = tmpl_context
         
         econf = self.config['pylons.environ_config']
-        if econf.get('session') and econf['session'] in environ:
-            pylons_obj.session = environ[econf['session']]
-        elif 'beaker.session' in environ:
-            pylons_obj.session = environ['beaker.session']
-        if econf.get('cache') and econf['cache'] in environ:
-            pylons_obj.cache = environ[econf['cache']]
-        elif 'beaker.cache' in environ:
-            pylons_obj.cache = environ['beaker.cache']
+        if self._session_key in environ:
+            pylons_obj.session = environ[self._session_key]
+        if self._cache_key in environ:
+            pylons_obj.cache = environ[self._cache_key]
         
         # Load the globals with the registry if around
         if 'paste.registry' in environ:
@@ -302,7 +312,7 @@ class PylonsApp(object):
             return HTTPNotFound()(environ, start_response)
 
         # If it's a class, instantiate it
-        if inspect.isclass(controller):
+        if hasattr(controller, '__bases__'):
             if log_debug:
                 log.debug("Controller appears to be a class, instantiating")
             controller = controller()
@@ -324,9 +334,9 @@ class PylonsApp(object):
         pylons_obj = environ['pylons.pylons']
         testenv['req'] = pylons_obj.request
         testenv['response'] = pylons_obj.response
-        testenv['tmpl_context'] = testenv['c'] = pylons_obj.c
+        testenv['tmpl_context'] = pylons_obj.tmpl_context
         testenv['app_globals'] = testenv['g'] = pylons_obj.app_globals
-        testenv['h'] = self.config['pylons.h'] or pylons_obj.h
+        testenv['h'] = self.config['pylons.h']
         testenv['config'] = self.config
         if hasattr(pylons_obj, 'session'):
             testenv['session'] = pylons_obj.session

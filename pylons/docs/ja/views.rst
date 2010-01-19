@@ -196,8 +196,8 @@ Pylons は `Mako`__ 、 `Genshi`__ 、 `Jinja2`__ テンプレートレンダリ
 
     import logging
 
-    from pylons import request, response, session, tmpl_context as c, url
-    from pylons.controllers.util import abort, redirect
+    from pylons import request, response, session, tmpl_context as c
+    from pylons.controllers.util import abort, redirect_to
 
     from helloworld.lib.base import BaseController, render
 
@@ -274,6 +274,8 @@ Pylons は `Mako`__ 、 `Genshi`__ 、 `Jinja2`__ テンプレートレンダリ
 
 
 .. Default Template Variables
+
+.. _template-globals:
 
 **************************
 デフォルトテンプレート変数

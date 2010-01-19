@@ -34,11 +34,11 @@ Add a new template called `form.mako` in the `templates` directory that contains
     <input type="submit" name="submit" value="Submit" /> 
     </form> 
 
-If the server is still running (see the Getting Started Guide) you can visit http://localhost:5000/hello/form and you will see the form. Try entering the email address `test@example.com` and clicking Submit. The URL should change to ``http://localhost:5000/hello/email?email=test%40example.com`` and you should see the text `Your email is test@example.com`. 
+If the server is still running (see the :ref:`Getting Started Guide <getting_started>`) you can visit http://localhost:5000/hello/form and you will see the form. Try entering the email address `test@example.com` and clicking Submit. The URL should change to ``http://localhost:5000/hello/email?email=test%40example.com`` and you should see the text `Your email is test@example.com`. 
 
 In Pylons all form variables can be accessed from the :data:`request.params` object which behaves like a dictionary. The keys are the names of the fields in the form and the value is a string with all the characters entity decoded. For example note how the `@` character was converted by the browser to `%40` in the URL and was converted back ready for use in :data:`request.params`. 
 
-.. Note:: `request` is actually a `WSGIRequest` object `documented here <http://pythonpaste.org/class-paste.wsgiwrappers.WSGIRequest.html#params>`_ and `request.params` is a `MultiDict` with `documentation here <http://pythonpaste.org/class-paste.util.multidict.MultiDict.html>`_. 
+.. Note:: `request` and `response` are objects from the `WebOb` library.  Full documentation on their attributes and methods is `here <http://pythonpaste.org/webob/>`_.
 
 If you have two fields with the same name in the form then using the dictionary interface will return the first string. You can get all the strings returned as a list by using the `.getall()` method. If you only expect one value and want to enforce this you should use `.getone()` which raises an error if more than one value with the same name is submitted. 
 
@@ -79,16 +79,28 @@ In this case once the form is submitted the data is saved and an HTTP redirect o
 Using the Helpers 
 ================= 
 
-Creating forms can also be done using Pylons' `built in helpers <http://pylonshq.com/WebHelpers/module-index.html>`_. Here is the same form created in the previous section but this time using the helpers: 
+Creating forms can also be done using WebHelpers, which comes with Pylons. Here is the same form created in the previous section but this time using the helpers: 
 
 .. code-block:: html+mako 
 
     ${h.form(h.url(action='email'), method='get')} 
-    Email Address: ${h.text_field('email')} 
+    Email Address: ${h.text('email')} 
     ${h.submit('Submit')} 
     ${h.end_form()} 
 
-You can also make use of the built-in script.aculo.us functionality or override the default behavior of any of the helpers by defining a new function of the same name at the bottom of your project's `lib/helpers.py` file. 
+Before doing this you'll have to import the helpers you want to use into your
+project's `lib/helpers.py` file; then they'll be available under Pylons' ``h``
+global.  Most projects will want to import at least these:
+
+.. code-block:: python
+
+   from webhelpers.html import escape, HTML, literal, url_escape
+   from webhelpers.html.tags import *
+
+There are many other helpers for text formatting, container objects,
+statistics, and for dividing large query results into pages.  See the
+:mod:`WebHelpers documentation <webhelpers>` to choose the helpers you'll need.
+
 
 .. _file_uploads:
 
@@ -241,7 +253,7 @@ to find HTML fields and replace them with the values were originally submitted.
 Validation the Long Way 
 -----------------------
 
-The `validate` decorator covers up a bit of work, and depending on your needs its possible you could need direct access to FormEncode abilities it smoothes over. 
+The `validate` decorator covers up a bit of work, and depending on your needs it's possible you could need direct access to FormEncode abilities it smoothes over. 
 
 Here's the longer way to use the `EmailForm` schema: 
 
@@ -251,12 +263,12 @@ Here's the longer way to use the `EmailForm` schema:
 
     def email(self): 
         schema = EmailForm() 
-    try: 
-        form_result = schema.to_python(request.params) 
-    except formencode.validators.Invalid, error: 
-        return 'Invalid: %s' % error 
-    else: 
-        return 'Your email is: %s' % form_result.get('email') 
+        try: 
+            form_result = schema.to_python(request.params) 
+        except formencode.validators.Invalid, error: 
+            return 'Invalid: %s' % error 
+        else: 
+            return 'Your email is: %s' % form_result.get('email') 
 
 If the values entered are valid, the schema's `to_python()` method returns a
 dictionary of the validated and coerced `form_result`. This means that you can
@@ -269,19 +281,18 @@ field for age in years and we had used a `formencode.validators.Int()`
 validator, the value in `form_result` for the age would also be the correct
 type; in this case a Python integer.
 
-.. note:: 
-    FormEncode comes with a useful set of validators but you can also easily
-    create your own. If you do create your own validators you will find it very
-    useful that all FormEncode schemas' `.to_python()` methods take a second
-    argument named `state`. This means you can pass the Pylons `c` object
-    into your validators so that you can set any variables that your validators
-    need in order to validate a particular field as an attribute of the `c`
-    object. It can then be passed as the `c` object to the schema as follows:
+FormEncode comes with a useful set of validators but you can also easily
+create your own. If you do create your own validators you will find it very
+useful that all FormEncode schemas' `.to_python()` methods take a second
+argument named `state`. This means you can pass the Pylons `c` object
+into your validators so that you can set any variables that your validators
+need in order to validate a particular field as an attribute of the `c`
+object. It can then be passed as the `c` object to the schema as follows:
 
-    .. code-block:: python 
+.. code-block:: python 
 
-        c.domain = 'example.com' 
-        form_result = schema.to_python(request.params, c) 
+    c.domain = 'example.com' 
+    form_result = schema.to_python(request.params, c) 
 
 The schema passes `c` to each validator in turn so that you can do things like this: 
 

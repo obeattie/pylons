@@ -14,7 +14,7 @@ HERE_DIR = os.getcwd()
 BUILD_DIR = path.join(HERE_DIR, '_build')
 
 #host = 'http://localhost:25050'
-host = 'http://beta.pylonshq.com'
+host = 'http://pylonshq.com'
 
 post_uri = '%s/docs/upload' % host
 image_uri = '%s/docs/upload_image' % host
@@ -34,6 +34,15 @@ def scan_dir(parent, directory):
             if name.endswith('.fpickle') or name.endswith('.pickle'):
                 fp = open(full_name, 'r')
                 data = cPickle.load(fp)
+                fp.close()
+                files.append(
+                    ('/'.join([parent, name]), data)
+                )
+            elif name == 'objects.inv':
+                fp = open(full_name, 'r')
+                data = {}
+                data['current_page_name'] = 'objects.inv'
+                data['content'] = fp.read()
                 fp.close()
                 files.append(
                     ('/'.join([parent, name]), data)
@@ -72,8 +81,8 @@ headers.setdefault('Authkey', dockey)
 language = os.path.split(HERE_DIR)[-1]
 
 # Delete this revision, just in case
-del_uri = '%s/%s/%s' % (delete_uri, basedata['project'], basedata['version'])
-resp, data = http.request(del_uri, 'GET', headers=headers)
+# del_uri = '%s/%s/%s' % (delete_uri, basedata['project'], basedata['version'])
+# resp, data = http.request(del_uri, 'GET', headers=headers)
 
 for filename, filedoc in files:
     if not isinstance(filedoc, dict):

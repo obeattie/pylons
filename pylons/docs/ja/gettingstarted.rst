@@ -5,15 +5,17 @@ Getting Started
 ===================
 
 .. This section is intended to get Pylons up and running as fast as
-.. possible and provide a quick overview of a project. Links are provided
-.. throughout to encourage exploration of the various aspects of Pylons.
+.. possible and provide a quick overview of the project. Links are
+.. provided throughout to encourage exploration of the various aspects
+.. of Pylons.
 
 このセクションでは、できるだけ早く Pylons を始められるようになることと、
-プロジェクトの quick overview を提供することを意図しています。Pylons の
-種々な側面の探検を奨励するために、リンクが提供されます。
+そのプロジェクトの quick overview を提供することを意図しています。
+Pylons の種々な側面の探検を奨励するために、リンクが提供されます。
 
 
 .. Requirements
+
 ******************
 動作条件
 ******************
@@ -24,6 +26,7 @@ Getting Started
 
 
 .. Installing
+
 **************
 インストール
 **************
@@ -39,31 +42,29 @@ Getting Started
 
 
 .. To avoid conflicts with system-installed Python libraries, Pylons
-.. comes with a boot-strap Python script that sets up a `virtual
-.. environment <http://pypi.python.org/pypi/virtualenv>`_. Pylons will
-.. then be installed under the virtual environment.
+.. comes with a boot-strap Python script that sets up a "virtual"
+.. Python environment. Pylons will then be installed under the virtual
+.. environment.
 
 システムにインストールされた Python ライブラリとの衝突を避けるために、
-Pylons には `virtual environment
-<http://pypi.python.org/pypi/virtualenv>`_ をセットアップするブートスト
-ラップ Python スクリプトが付属しています。そして Pylons は仮想環境にイ
-ンストールされます。
+Pylons には "仮想" Python 環境をセットアップするブートストラップ
+Python スクリプトが付属しています。そして Pylons は仮想環境にインストー
+ルされます。
 
 
-.. admonition:: By The Way
+.. admonition:: By the Way
     
-    .. virtualenv is a useful tool to create isolated Python
+    .. :term:`virtualenv` is a useful tool to create isolated Python
     .. environments. In addition to isolating packages from possible
     .. system conflicts, it makes it easy to install Python libraries
-    .. using `easy_install
-    .. <http://peak.telecommunity.com/DevCenter/EasyInstall>`_ without
-    .. dumping lots of packages into the system-wide Python.
+    .. using :term:`easy_install` without dumping lots of packages
+    .. into the system-wide Python.
 
-    virtualenv は独立した Python 環境を作成する便利なツールです。潜在的
-    なシステム衝突からパッケージを隔離することに加え、多くのパッケージ
-    を system-wide の Python の中にばらまくことなく、 `easy_install
-    <http://peak.telecommunity.com/DevCenter/EasyInstall>`_ を使用して
-    Python ライブラリをインストールすることを簡単にします。
+    :term:`virtualenv` は独立した Python 環境を作成する便利なツールです。
+    潜在的なシステム衝突の可能性からパッケージを隔離することに加え、多
+    くのパッケージを system-wide の Python の中にばらまくことなく、
+    :term:`easy_install` を使用して Python ライブラリを簡単にインストー
+    ルできるようにします。
 
 
     .. The other great benefit is that no root access is required
@@ -106,10 +107,10 @@ Pylons には `virtual environment
 
     
     .. To isolate further from additional system-wide Python libraries, run
-    .. with the no site packages option:
+    .. with the --no-site-packages option:
 
-    system-wide の追加の Python ライブラリからも分離するためには、no
-    site packages オプションを付けて実行します。
+    system-wide の追加の Python ライブラリからも分離するためには、
+    \-\-no-site-packages オプションを付けて実行します。
 
 
     .. code-block:: bash
@@ -138,7 +139,7 @@ Windows では、このように activate してください:
 
 .. code-block:: text
     
-    > mydevenv\bin\activate.bat
+    > mydevenv\Scripts\activate.bat
 
 
 .. Working Directly From the Source Code 
@@ -190,6 +191,7 @@ setuptools に ``Pylons`` というディレクトリに含まれるバージョ
 
 
 .. Creating a Pylons Project
+
 *******************************
 Pylons プロジェクトを作成する
 *******************************
@@ -209,40 +211,37 @@ Pylons プロジェクトを作成する
     
     .. Windows users must configure their ``PATH`` as described in
     .. :ref:`windows_notes`, otherwise they must specify the full path
-    .. name to the ``paster`` command (including the virtual
-    .. environment bin dir).
+    .. to the ``paster`` command (including the virtual environment
+    .. bin directory).
 
     Window ユーザーは、 :ref:`windows_notes` で説明されているように
     ``PATH`` を構成しなければなりません。さもなければ、 (仮想環境 bin
-    ディレクトリに含まれている) ``paster`` コマンドにフルパス名を指定し
-    なければならないことに注意します。
+    ディレクトリに含まれている) ``paster`` コマンドにフルパスを指定する
+    必要があります。
 
 
-.. Running this will prompt for three choices:
+.. Running this will prompt for two choices:
 
-これを実行すると、 3 つのプロンプトが表示されます:
+これを実行すると、 2 つのプロンプトが表示されます:
 
 
-.. 1. which template language to use
+.. 1. which templating engine to use
 .. 2. whether to include :term:`SQLAlchemy` support
-.. 3. whether to set options for :term:`Google App Engine` development
 
-1. どのテンプレート言語を使用するか
+1. どのテンプレートエンジンを使用するか
 2. :term:`SQLAlchemy` サポートを含めるか
-3. :term:`Google App Engine` 開発のためのオプションを設定するか
 
 
 .. Hit enter at each prompt to accept the defaults (Mako templating,
 .. no :term:`SQLAlchemy`, no :term:`Google App Engine` settings).
 
 それぞれのプロンプトについて、デフォルトを受け入れるなら Enter キーを打っ
-てください (デフォルトでは Mako テンプレート、 :term:`SQLAlchemy` なし、
-:term:`Google App Engine` 設定なしです)
+てください (デフォルトでは Mako テンプレート、 :term:`SQLAlchemy` なしです)
 
 
-.. The created directory structure with links to more information:
+.. Here is the created directory structure with links to more information:
 
-作成されたディレクトリ構造と詳しい情報へのリンク:
+これは作成されたディレクトリ構造と詳しい情報へのリンクです:
 
 
 - helloworld
@@ -251,7 +250,7 @@ Pylons プロジェクトを作成する
     - development.ini - :ref:`run-config`
     - docs
     - ez_setup.py
-    - helloworld (See nested :ref:`helloworld directory <helloworld_dir>`)
+    - helloworld (入れ子の :ref:`helloworld ディレクトリ <helloworld_dir>` 参照)
     - helloworld.egg-info
     - setup.cfg
     - setup.py - :ref:`setup-config`
@@ -284,6 +283,7 @@ Pylons プロジェクトを作成する
 
 
 .. Running the application
+
 *****************************
 アプリケーションを実行する
 *****************************
@@ -356,8 +356,8 @@ Hello World
 
     import logging
 
-    from pylons import request, response, session, tmpl_context as c, url
-    from pylons.controllers.util import abort, redirect
+    from pylons import request, response, session, tmpl_context as c
+    from pylons.controllers.util import abort, redirect_to
 
     from helloworld.lib.base import BaseController, render
 
@@ -372,11 +372,11 @@ Hello World
             return 'Hello World'
 
 
-.. At the top are some imports of common objects that are frequently used
-.. in controllers.
+.. At the top of the module, some commonly used objects are imported
+.. automatically.
 
-先頭で、コントローラで頻繁に使用される一般的なオブジェクトのいくつかが
-インポートされています。
+モジュールの先頭で、コントローラで共通に使用されるいくつかのオブジェク
+トが自動的にインポートされています。
 
 
 .. Navigate to http://127.0.0.1:5000/hello/index where there should be
@@ -390,8 +390,7 @@ World" という短いテキスト文字列があるはずです。(必要なら
 
 .. image:: _static/helloworld.png
 
-
-.. admonition:: How'd that get to /hello/index?
+.. admonition:: Tip
     
     .. :ref:`url-config` explains how URL's get mapped to controllers
     .. and their methods.
@@ -422,14 +421,13 @@ World" という短いテキスト文字列があるはずです。(必要なら
 
 
 .. The :term:`request` variable in templates is used to get
-.. information about the current request. `template globals
-.. <modules/templating.html#template-globals>`_ lists all the
-.. variables Pylons makes available for use in templates.
+.. information about the current request. :ref:`Template globals
+.. <template-globals>` lists all the variables Pylons makes available
+.. for use in templates.
 
 テンプレートの中の :term:`request` 変数は、現在のリクエストの情報を得る
 ために使用されます。 Pylons においてテンプレートの中で使えるすべての変
-数は、 `template グローバル変数
-<modules/templating.html#template-globals>`_ にリストされています。
+数は、 `template グローバル変数 <template-globals>` にリストされています。
 
 
 .. Next, update the :file:`controllers/hello.py` module so that the

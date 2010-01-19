@@ -20,10 +20,10 @@ import warnings
 
 from paste.config import DispatchingConfig
 from paste.deploy.converters import asbool
+from webhelpers.mimehelper import MIMETypes
 
 import pylons.legacy
 import pylons.templating
-from webhelpers.mimehelper import MIMETypes
 
 
 default_template_engine = 'mako'
@@ -37,7 +37,9 @@ response_defaults = dict(content_type='text/html',
 log = logging.getLogger(__name__)
 
 
-class PylonsConfig(DispatchingConfig):
+config = DispatchingConfig()
+
+class PylonsConfig(dict):
     """Pylons configuration object
 
     The Pylons configuration object is a per-application instance
@@ -113,11 +115,29 @@ class PylonsConfig(DispatchingConfig):
         'pylons.h': None,
         'pylons.request_options': request_defaults.copy(),
         'pylons.response_options': response_defaults.copy(),
-        'pylons.strict_c': False,
-        'pylons.c_attach_args': True,
+        'pylons.strict_tmpl_context': False,
+        'pylons.tmpl_context_attach_args': True,
         'buffet.template_engines': [],
         'buffet.template_options': {},
     }
+    
+    def __setitem__(self, name, value):
+        if name in ['pylons.strict_c', 'pylons.c_attach_args']:
+            new_name = name.replace('c', 'tmpl_context')
+            warnings.warn(pylons.legacy.c_attrib_moved % \
+                          (name, new_name),
+                          DeprecationWarning, 3)
+            name = new_name
+        dict.__setitem__(self, name, value)
+
+    def __getitem__(self, name):
+        if name in ['pylons.strict_c', 'pylons.c_attach_args']:
+            new_name = name.replace('c', 'tmpl_context')
+            warnings.warn(pylons.legacy.c_attrib_moved % \
+                          (name, new_name),
+                          DeprecationWarning, 3)
+            name = new_name
+        return dict.__getitem__(self, name)
 
     def __getattr__(self, name):
         # Backwards compatibility
@@ -131,7 +151,7 @@ class PylonsConfig(DispatchingConfig):
                     setattr(self, name, value)
             return FakeConfig
         else:
-            conf_dict = self.current_conf()
+            conf_dict = self
 
             # Backwards compat for when the option is now in the dict, 
             # and access was attempted via attribute
@@ -141,11 +161,17 @@ class PylonsConfig(DispatchingConfig):
                     warnings.warn(pylons.legacy.config_attr_moved % \
                                    (name, full_name), DeprecationWarning, 3)
                     return conf_dict[full_name]
+            if name in ['pylons.strict_c', 'pylons.c_attach_args']:
+                new_name = name.replace('c', 'tmpl_context')
+                warnings.warn(pylons.legacy.c_attrib_moved % \
+                              (name, new_name),
+                              DeprecationWarning, 3)
+                name = new_name
             if name == 'request_defaults':
                 return request_defaults
             elif name == 'response_defaults':
                 return response_defaults
-            return getattr(conf_dict, name)
+            return conf_dict[name]
 
     def load_environment(self, tmpl_options=None, map=None, paths=None,
                          environ_config=None, default_charset=None,
@@ -237,6 +263,8 @@ class PylonsConfig(DispatchingConfig):
             config.template_engines.append(old_default)
         
         """
+        warnings.warn("add_template_engine is deprecated, use custom render"
+                      " functions instead", DeprecationWarning, 3)
         if not options:
             options = self['buffet.template_options']
         config = dict(engine=engine, template_root=root,
@@ -282,11 +310,7 @@ class PylonsConfig(DispatchingConfig):
         .. versionchanged:: 0.9.7
             ``template_engine`` is no longer required, and can be set
             to :data:`None` to avoid loading the default one.
-        
-        ``template_engine``
-            Declare the default template engine to setup. Choices are
-            kid, genshi, mako (the default), and pylonsmyghty.
-        
+                
         """
         log.debug("Initializing configuration, package: '%s'", package)
         conf = global_conf.copy()
@@ -309,12 +333,11 @@ class PylonsConfig(DispatchingConfig):
             warnings.warn(pylons.legacy.root_path, DeprecationWarning, 2)
             paths['root'] = paths['root_path']
         
-        log.debug("Pushing process configuration")
-        self.push_process_config(conf)
-        self.set_defaults(template_engine)
+        self.update(conf)
+        self.set_defaults()
     
-    def set_defaults(self, template_engine):
-        conf = self.current_conf()
+    def set_defaults(self, template_engine=None):
+        conf = self
         
         # Load the MIMETypes with its default types
         MIMETypes.init()
@@ -443,11 +466,11 @@ class PylonsConfig(DispatchingConfig):
         conf['pylons.errorware'] = errorware
 
 
-config = PylonsConfig()
+pylons_config = PylonsConfig()
 
 
 # Push an empty config so all accesses to config at import time have something
 # to look at and modify. This config will be merged with the app's when it's
 # built in the paste.app_factory entry point.
-initial_config = copy.deepcopy(PylonsConfig.defaults)
-config.push_process_config(initial_config)
+pylons_config.update(copy.deepcopy(PylonsConfig.defaults))
+config.push_process_config(pylons_config)

@@ -1,12 +1,21 @@
 """Tests against full Pylons projects created from scratch"""
 import os
 import sys
-import time
 from shutil import rmtree
 
 import pkg_resources
+import nose
+import nose.config
+import pylons
 from nose import SkipTest
 from paste.fixture import *
+
+try:
+    import sqlalchemy as sa
+    SQLAtesting = True
+except ImportError:
+    SQLAtesting = False
+# SQLAtesting = False
 
 is_jython = sys.platform.startswith('java')
 
@@ -27,7 +36,7 @@ testenv = TestFileEnvironment(
     environ=test_environ)
 
 projenv = None
-    
+
 def _get_script_name(script):
     if sys.platform == 'win32':
         script += '.exe'
@@ -44,7 +53,7 @@ def svn_repos_setup():
     assert 'REPOS' in res.files_created
     testenv.ignore_paths.append('REPOS')
 
-def paster_create(template_engine='mako', overwrite=False):
+def paster_create(template_engine='mako', overwrite=False, sqlatesting=False):
     global projenv
     paster_args = ['create', '--verbose', '--no-interactive']
     if overwrite:
@@ -52,7 +61,7 @@ def paster_create(template_engine='mako', overwrite=False):
     paster_args.extend(['--template=pylons',
                         'ProjectName',
                         'version=0.1',
-                        'sqlalchemy=False',
+                        'sqlalchemy=%s' % sqlatesting,
                         'zip_safe=False',
                         'template_engine=%s' % template_engine])
     res = testenv.run(_get_script_name('paster'), *paster_args)
@@ -63,7 +72,7 @@ def paster_create(template_engine='mako', overwrite=False):
         if not overwrite:
             assert fn in res.files_created.keys()
         assert fn in res.stdout
-
+    
     if not overwrite:
         setup = res.files_created[os.path.join('ProjectName','setup.py')]
         setup.mustcontain('0.1')
@@ -93,6 +102,14 @@ def make_controller():
     # Make sure all files are added to the repository:
     assert '?' not in res.stdout
 
+def make_controller_subdirectory():
+    res = projenv.run(_get_script_name('paster')+' controller mysubdir/sample')
+    assert os.path.join('projectname','controllers', 'mysubdir', 'sample.py') in res.files_created
+    assert os.path.join('projectname','tests','functional','test_mysubdir_sample.py') in res.files_created
+    #res = projenv.run(_get_script_name('svn')+' status')
+    # Make sure all files are added to the repository:
+    assert '?' not in res.stdout
+
 def make_restcontroller():
     res = projenv.run(_get_script_name('paster')+' restcontroller restsample restsamples')
     assert os.path.join('projectname','controllers','restsamples.py') in res.files_created
@@ -101,22 +118,39 @@ def make_restcontroller():
     # Make sure all files are added to the repository:
     assert '?' not in res.stdout
 
+def make_restcontroller_subdirectory():
+    res = projenv.run(_get_script_name('paster')+' restcontroller mysubdir/restsample mysubdir/restsamples')
+    assert os.path.join('projectname','controllers','mysubdir', 'restsamples.py') in res.files_created
+    assert os.path.join('projectname','tests','functional','test_mysubdir_restsamples.py') in res.files_created
+    #res = projenv.run(_get_script_name('svn')+' status')
+    # Make sure all files are added to the repository:
+    assert '?' not in res.stdout
+
+
 def _do_proj_test(copydict, emptyfiles=None):
     """Given a dict of files, where the key is a filename in filestotest, the value is
     the destination in the new projects dir. emptyfiles is a list of files that should
     be created and empty."""
-    if is_jython:
-        # Hack for Jython .py/bytecode mtime handling:
-        # http://bugs.jython.org/issue1024 (the issue actually describes
-        # this test)
-        time.sleep(1)
+    if pylons.test.pylonsapp:
+        pylons.test.pylonsapp = None
+    
     if not emptyfiles:
         emptyfiles = []
     for original, newfile in copydict.iteritems():
         projenv.writefile(newfile, frompath=original)
     for fi in emptyfiles:
         projenv.writefile(fi)
-    res = projenv.run(_get_script_name('nosetests')+' -d',
+    
+    # here_dir = os.getcwd()
+    # test_dir = os.path.join(testenv.cwd, 'ProjectName').replace('\\','/')
+    # os.chdir(test_dir)
+    # sys.path.append(test_dir)
+    # nose.run(argv=['nosetests', '-d', test_dir])
+    # 
+    # sys.path.pop(-1)
+    # os.chdir(here_dir)
+    
+    res = projenv.run(_get_script_name('nosetests')+' -d --with-coverage --cover-package=pylons',
                       expect_stderr=True,
                       cwd=os.path.join(testenv.cwd, 'ProjectName').replace('\\','/'))
 
@@ -150,11 +184,11 @@ def do_genshi():
         }
     copydict = {
         'testgenshi.html':'projectname/templates/testgenshi.html',
-        'middleware_def_engine.py':'projectname/config/middleware.py',
+        'environment_def_engine.py':'projectname/config/environment.py',
         'functional_sample_controller_sample2.py':'projectname/tests/functional/test_sample2.py'
     }
     copydict.update(reset)
-    empty = ['projectname/templates/__init__.py']
+    empty = ['projectname/templates/__init__.py', 'projectname/tests/functional/test_cache.py']
     _do_proj_test(copydict, empty)
 
 def do_two_engines():
@@ -186,7 +220,8 @@ def do_jinja2():
          'projectname/templates/__init__.py',
          'projectname/tests/functional/test_sample.py',
          'projectname/tests/functional/test_sample2.py',
-         'projectname/tests/functional/test_sample3.py'
+         'projectname/tests/functional/test_sample3.py',
+         'projectname/tests/functional/test_cache.py'
      ]
     _do_proj_test(copydict, empty)
 
@@ -247,6 +282,36 @@ def make_tag():
         start_clear=False,
         template_path=template_path)
 
+def do_sqlaproject():
+    paster_create(template_engine='mako', overwrite=True, sqlatesting=True)
+    reset = {
+        'helpers_sample.py':'projectname/lib/helpers.py',
+        'app_globals.py':'projectname/lib/app_globals.py',
+        'rest_routing.py':'projectname/config/routing.py',
+        'development_sqlatesting.ini':'development.ini',
+        'websetup.py':'projectname/websetup.py',
+        'model__init__.py':'projectname/model/__init__.py',
+        'environment_def_sqlamodel.py':'projectname/config/environment.py',
+        'tests__init__.py':'projectname/tests/__init__.py',
+        }
+    copydict = {
+        'controller_sqlatest.py':'projectname/controllers/sample.py',
+        'test_mako.html':'projectname/templates/test_mako.html',
+        'test_sqlalchemy.html':'projectname/templates/test_sqlalchemy.html',
+        'functional_sample_controller_sqlatesting.py':'projectname/tests/functional/test_sqlalchemyproject.py',
+    }
+    copydict.update(reset)
+    empty = [
+         'projectname/templates/__init__.py',
+         'projectname/tests/functional/test_sample.py',
+         'projectname/tests/functional/test_sample2.py',
+         'projectname/tests/functional/test_sample3.py',
+         'projectname/tests/functional/test_cache.py'
+     ]
+    _do_proj_test(copydict, empty)
+    # res = projenv.run(_get_script_name('paster')+' setup-app development.ini', expect_stderr=True,)
+    # assert '?' not in res.stdout
+
 
 # Unfortunately, these are ordered, so be careful
 def test_project_paster_create():
@@ -254,6 +319,9 @@ def test_project_paster_create():
 
 def test_project_make_controller():
     make_controller()
+
+def test_project_make_controller_subdirectory():
+    make_controller_subdirectory()
 
 def test_project_do_nosetests():
     do_nosetests()
@@ -267,6 +335,9 @@ def test_project_do_i18ntest():
 def test_project_make_restcontroller():
     make_restcontroller()
 
+def test_project_make_restcontroller_subdirectory():
+    make_restcontroller_subdirectory()
+    
 def test_project_do_rest_nosetests():
     copydict = {
         'rest_routing.py':'projectname/config/routing.py',
@@ -302,7 +373,13 @@ def test_project_do_xmlrpc():
 
 #def test_project_make_tag():
 #    make_tag()
+def test_project_do_sqlaproject():
+    if SQLAtesting:
+        do_sqlaproject()
+    else:
+        pass
 
 def teardown():
     dir_to_clean = os.path.join(os.path.dirname(__file__), TEST_OUTPUT_DIRNAME)
     rmtree(dir_to_clean)
+

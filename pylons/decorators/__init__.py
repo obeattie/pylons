@@ -14,8 +14,9 @@ import formencode
 import simplejson
 from decorator import decorator
 from formencode import api, htmlfill, variabledecode
-from webob import UnicodeMultiDict
+from webob.multidict import UnicodeMultiDict
 
+from pylons.decorators.util import get_pylons
 from pylons.i18n import _ as pylons_gettext
 
 __all__ = ['jsonify', 'validate']
@@ -25,15 +26,15 @@ log = logging.getLogger(__name__)
 def jsonify(func, *args, **kwargs):
     """Action decorator that formats output for JSON
 
-    Given a function that will return content, this decorator will
-    turn the result into JSON, with a content-type of 'text/javascript'
-    and output it.
+    Given a function that will return content, this decorator will turn
+    the result into JSON, with a content-type of 'application/json' and
+    output it.
     
     """
-    self = args[0]
-    self._py_object.response.headers['Content-Type'] = 'application/json'
+    pylons = get_pylons(args)
+    pylons.response.headers['Content-Type'] = 'application/json'
     data = func(*args, **kwargs)
-    if isinstance(data, list):
+    if isinstance(data, (list, tuple)):
         msg = "JSON responses with Array envelopes are susceptible to " \
               "cross-site data leak attacks, see " \
               "http://pylonshq.com/warnings/JSONArray"
@@ -146,9 +147,6 @@ def validate(schema=None, validators=None, form=None, variable_decode=False,
                     except formencode.Invalid, error:
                         errors[field] = error
         if errors:
-            # Turn off exception catching in dispatch_call
-            self._catch_dispatch_exception = False
-            
             log.debug("Errors found in validation, parsing form with htmlfill "
                       "for errors")
             request.environ['REQUEST_METHOD'] = 'GET'

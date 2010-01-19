@@ -9,7 +9,7 @@ from genshi.template import TemplateLoader
 {{elif template_engine == 'jinja2'}}
 from jinja2 import ChoiceLoader, Environment, FileSystemLoader
 {{endif}}
-from pylons import config
+from pylons.configuration import PylonsConfig
 {{if template_engine == 'mako'}}
 from pylons.error import handle_mako_error
 {{endif}}
@@ -28,6 +28,8 @@ def load_environment(global_conf, app_conf):
     """Configure the Pylons environment via the ``pylons.config``
     object
     """
+    config = PylonsConfig()
+    
     # Pylons paths
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     paths = dict(root=root,
@@ -38,9 +40,14 @@ def load_environment(global_conf, app_conf):
     # Initialize config with the basic options
     config.init_app(global_conf, app_conf, package='{{package}}', paths=paths)
 
-    config['routes.map'] = make_map()
-    config['pylons.app_globals'] = app_globals.Globals()
+    config['routes.map'] = make_map(config)
+    config['pylons.app_globals'] = app_globals.Globals(config)
     config['pylons.h'] = {{package}}.lib.helpers
+    
+    # Setup cache object as early as possible
+    import pylons
+    pylons.cache._push_object(config['pylons.app_globals'].cache)
+    
     {{if template_engine == 'mako'}}
 
     # Create the Mako TemplateLookup, with the default auto-escaping
@@ -61,13 +68,14 @@ def load_environment(global_conf, app_conf):
     config['pylons.app_globals'].jinja2_env = Environment(loader=ChoiceLoader(
             [FileSystemLoader(path) for path in paths['templates']]))
     # Jinja2's unable to request c's attributes without strict_c
-    config['pylons.strict_c'] = True
-    {{endif}}
-    {{if sqlalchemy}}
-    # Setup SQLAlchemy database engine
+    config['pylons.strict_tmpl_context'] = True
+{{endif}}{{if sqlalchemy}}
+    # Setup the SQLAlchemy database engine
     engine = engine_from_config(config, 'sqlalchemy.')
     init_model(engine)
     {{endif}}
-    
+
     # CONFIGURATION OPTIONS HERE (note: all config options will override
     # any Pylons config options)
+    
+    return config

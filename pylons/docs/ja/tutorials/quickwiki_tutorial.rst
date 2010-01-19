@@ -40,11 +40,11 @@ That's it! Now you can visit http://127.0.0.1:5000 and experiment with the finis
 
 When you've finished, stop the server with ``CTRL+C`` because we will start developing our own version. 
 
-If you are interested in looking at the latest version of the QuickWiki source code it can be browsed online at http://www.knowledgetap.com/hg/QuickWiki or can be checked out using Mercurial: 
+If you are interested in looking at the latest version of the QuickWiki source code it can be browsed online at http://bitbucket.org/bbangert/quickwiki/src/ or can be checked out using Mercurial: 
 
 .. code-block:: bash 
 
-    $ hg clone http://www.knowledgetap.com/hg/QuickWiki 
+    $ hg clone http://bitbucket.org/bbangert/quickwiki 
 
 .. Note:: 
 
@@ -79,7 +79,7 @@ The Model
 
 Pylons uses a Model View Controller architecture; we'll start by creating the model. We could use any system we like for the model including `SQLObject <http://www.sqlobject.org>`_ or `SQLAlchemy <http://www.sqlalchemy.org>`_. SQLAlchemy is the default for current versions of Pylons, and we'll use it for QuickWiki. 
 
-.. Note:: SQLAlchemy is a Python SQL toolkit and Object Relational Mapper that is fast becoming the default choice for many Python programmers. 
+.. Note:: SQLAlchemy is a Python SQL toolkit and Object Relational Mapper that is quite popular among many Python programmers. 
 
 SQLAlchemy provides a full suite of well known enterprise-level persistence patterns, designed for efficient and high-performance database access, adapted into a simple and Pythonic domain language. There is full and detailed documentation available on the SQLAlchemy website at http://sqlalchemy.org/docs/ and you should really read this before you get heavily into SQLAlchemy. 
 

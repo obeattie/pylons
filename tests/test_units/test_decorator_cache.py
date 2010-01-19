@@ -2,7 +2,7 @@ import os
 import shutil
 import time
 
-from paste.fixture import TestApp
+from webtest import TestApp
 from paste.registry import RegistryManager
 
 from beaker.middleware import CacheMiddleware
@@ -17,43 +17,61 @@ from __init__ import data_dir, TestWSGIController
 
 class CacheController(WSGIController):
     def test_default_cache_decorator(self):
-        pylons.g.counter += 1
-        return 'Counter=%s' % pylons.g.counter
+        pylons.app_globals.counter += 1
+        return 'Counter=%s' % pylons.app_globals.counter
     test_default_cache_decorator = beaker_cache(key=None)(test_default_cache_decorator)
 
+    def test_default_cache_decorator_func(self):
+        def func():
+            pylons.app_globals.counter += 1
+            return 'Counter=%s' % pylons.app_globals.counter
+        func = beaker_cache(key=None)(func)
+        return func()
+    
+    def test_response_cache_func(self, use_cache_status=True):
+        pylons.response.status_int = 404
+        def func():
+            pylons.app_globals.counter += 1
+            return 'Counter=%s' % pylons.app_globals.counter
+        if use_cache_status:
+            func = beaker_cache(key=None)(func)
+        else:
+            func = beaker_cache(key=None, cache_response=False)(func)
+        return func()
+    
     def test_dbm_cache_decorator(self):
-        pylons.g.counter += 1
-        return 'Counter=%s' % pylons.g.counter
+        pylons.app_globals.counter += 1
+        return 'Counter=%s' % pylons.app_globals.counter
     test_dbm_cache_decorator = beaker_cache(key=None, type='dbm')(test_dbm_cache_decorator)
     
     def test_get_cache_decorator(self):
-        pylons.g.counter += 1
-        return 'Counter=%s' % pylons.g.counter
+        pylons.app_globals.counter += 1
+        return 'Counter=%s' % pylons.app_globals.counter
     test_get_cache_decorator = beaker_cache(key="param", query_args=True)(test_get_cache_decorator)
 
     def test_get_cache_default(self):
-        pylons.g.counter += 1
-        return 'Counter=%s' % pylons.g.counter
+        pylons.app_globals.counter += 1
+        return 'Counter=%s' % pylons.app_globals.counter
     test_get_cache_default = beaker_cache(query_args=True)(test_get_cache_default)
     
     def test_expire_cache_decorator(self):
-        pylons.g.counter += 1
-        return 'Counter=%s' % pylons.g.counter
+        pylons.app_globals.counter += 1
+        return 'Counter=%s' % pylons.app_globals.counter
     test_expire_cache_decorator = beaker_cache(expire=1)(test_expire_cache_decorator)
 
     def test_expire_dbm_cache_decorator(self):
-        pylons.g.counter += 1
-        return 'Counter=%s' % pylons.g.counter
+        pylons.app_globals.counter += 1
+        return 'Counter=%s' % pylons.app_globals.counter
     test_expire_dbm_cache_decorator = beaker_cache(expire=1)(test_expire_dbm_cache_decorator)
     
     def test_key_cache_decorator(self, id):
-        pylons.g.counter += 1
-        return 'Counter=%s, id=%s' % (pylons.g.counter, id)
+        pylons.app_globals.counter += 1
+        return 'Counter=%s, id=%s' % (pylons.app_globals.counter, id)
     test_key_cache_decorator = beaker_cache(key="id")(test_key_cache_decorator)
     
     def test_keyslist_cache_decorator(self, id, id2="123"):
-        pylons.g.counter += 1
-        return 'Counter=%s, id=%s' % (pylons.g.counter, id)
+        pylons.app_globals.counter += 1
+        return 'Counter=%s, id=%s' % (pylons.app_globals.counter, id)
     test_keyslist_cache_decorator = beaker_cache(key=["id", "id2"])(test_keyslist_cache_decorator)
 
     def test_invalidate_cache(self):
@@ -72,6 +90,10 @@ class CacheController(WSGIController):
         pylons.response.headers['x-dont-include'] = 'should not be included'
         return "Hello folks, time is %s" % time.time()
     test_header_cache = beaker_cache(cache_headers=('content-type','content-length', 'x-powered-by'))(test_header_cache)
+
+    def test_cache_key_dupe(self):
+        return "Hello folks, time is %s" % time.time()
+    test_cache_key_dupe = beaker_cache(query_args=True)(test_cache_key_dupe)
 
 cache_dir = os.path.join(data_dir, 'cache')
 
@@ -98,7 +120,7 @@ class TestCacheDecorator(TestWSGIController):
         self.get_response(action='test_invalidate_cache')
 
         response = self.get_response(action='test_default_cache_decorator')
-        assert 'text/html' in response.header_dict['content-type']
+        assert 'text/html' in response.headers['content-type']
         assert 'Counter=1' in response
 
         response = self.get_response(action='test_default_cache_decorator')
@@ -131,10 +153,25 @@ class TestCacheDecorator(TestWSGIController):
         
         response = self.get_response(action='test_get_cache_default', _url='/?param=1243')
         assert 'Counter=8' in response
-        response = self.get_response(action='test_get_cache_default', _url="/?param=123")
-        assert 'Counter=2' in response
         response = self.get_response(action='test_get_cache_default', _url="/?param=1243")
         assert 'Counter=8' in response
+        response = self.get_response(action='test_get_cache_default', _url="/?param=123")
+        assert 'Counter=9' in response
+
+        response = self.get_response(action='test_default_cache_decorator_func')
+        assert 'text/html' in response.headers['content-type']
+        assert 'Counter=10' in response
+        response = self.get_response(action='test_default_cache_decorator_func')
+        assert 'Counter=10' in response
+        
+        response = self.get_response(action='test_response_cache_func', use_cache_status=True)
+        
+        assert 'Counter=10' in response
+        
+        response = self.get_response(action='test_response_cache_func', use_cache_status=False,
+                                     test_args=dict(status=404))
+        assert 'Counter=10' in response
+        
     
     def test_dbm_cache_decorator(self):
         sap.g.counter = 0
@@ -171,21 +208,28 @@ class TestCacheDecorator(TestWSGIController):
         response = self.get_response(action='test_invalidate_cache')
         response = self.get_response(action='test_default_cache_decorator')
         assert 'Counter=2' in response
-        
+
+    def test_cache_key_dupe(self):
+        response = self.get_response(action='test_cache_key_dupe',
+                                     _url='/test_cache_key_dupe?id=1')
+        time.sleep(0.1)
+        response2 = self.get_response(action='test_cache_key_dupe',
+                                      _url='/test_cache_key_dupe?id=2&id=1')
+        assert str(response) != str(response2)
         
     def test_header_cache(self):
         response = self.get_response(action='test_header_cache')
-        assert response.header_dict['content-type'] == 'application/special'
-        assert response.header_dict['x-powered-by'] == 'pylons'
-        assert 'x-dont-include' not in response.header_dict
+        assert response.headers['content-type'] == 'application/special'
+        assert response.headers['x-powered-by'] == 'pylons'
+        assert 'x-dont-include' not in response.headers
         output = response.body
 
         time.sleep(1)
         response = self.get_response(action='test_header_cache')
         assert response.body == output
-        assert response.header_dict['content-type'] == 'application/special'
-        assert response.header_dict['x-powered-by'] == 'pylons'
-        assert 'x-dont-include' not in response.header_dict
+        assert response.headers['content-type'] == 'application/special'
+        assert response.headers['x-powered-by'] == 'pylons'
+        assert 'x-dont-include' not in response.headers
         
     def test_nocache(self):
         sap.g.counter = 0
