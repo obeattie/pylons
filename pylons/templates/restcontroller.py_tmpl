@@ -1,7 +1,7 @@
 import logging
 
-from pylons import request, response, session, tmpl_context as c
-from pylons.controllers.util import abort, redirect_to
+from pylons import request, response, session, tmpl_context as c, url
+from pylons.controllers.util import abort, redirect
 
 {{importstatement}}
 
@@ -13,19 +13,19 @@ class {{classname}}Controller(BaseController):
     # file has a resource setup:
     #     {{resource_command}}
     def index(self, format='html'):
-        """GET /{{path}}{{pluralname}}: All items in the collection"""
+        """GET /{{nameprefix}}{{pluralname}}: All items in the collection"""
         # url('{{nameprefix}}{{pluralname}}')
 
     def create(self):
-        """POST /{{path}}{{pluralname}}: Create a new item"""
+        """POST /{{nameprefix}}{{pluralname}}: Create a new item"""
         # url('{{nameprefix}}{{pluralname}}')
 
     def new(self, format='html'):
-        """GET /{{path}}{{pluralname}}/new: Form to create a new item"""
+        """GET /{{nameprefix}}{{pluralname}}/new: Form to create a new item"""
         # url('{{nameprefix}}new_{{singularname}}')
 
     def update(self, id):
-        """PUT /{{path}}{{pluralname}}/id: Update an existing item"""
+        """PUT /{{nameprefix}}{{pluralname}}/id: Update an existing item"""
         # Forms posted to this method should contain a hidden field:
         #    <input type="hidden" name="_method" value="PUT" />
         # Or using helpers:
@@ -34,7 +34,7 @@ class {{classname}}Controller(BaseController):
         # url('{{nameprefix}}{{singularname}}', id=ID)
 
     def delete(self, id):
-        """DELETE /{{path}}{{pluralname}}/id: Delete an existing item"""
+        """DELETE /{{nameprefix}}{{pluralname}}/id: Delete an existing item"""
         # Forms posted to this method should contain a hidden field:
         #    <input type="hidden" name="_method" value="DELETE" />
         # Or using helpers:
@@ -43,9 +43,9 @@ class {{classname}}Controller(BaseController):
         # url('{{nameprefix}}{{singularname}}', id=ID)
 
     def show(self, id, format='html'):
-        """GET /{{path}}{{pluralname}}/id: Show a specific item"""
+        """GET /{{nameprefix}}{{pluralname}}/id: Show a specific item"""
         # url('{{nameprefix}}{{singularname}}', id=ID)
 
     def edit(self, id, format='html'):
-        """GET /{{path}}{{pluralname}}/id/edit: Form to edit an existing item"""
+        """GET /{{nameprefix}}{{pluralname}}/id/edit: Form to edit an existing item"""
         # url('{{nameprefix}}edit_{{singularname}}', id=ID)
