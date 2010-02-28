@@ -1,7 +1,7 @@
 """Tests against full Pylons projects created from scratch"""
 import os
 import sys
-from shutil import rmtree
+import shutil
 
 import pkg_resources
 import pylons
@@ -36,7 +36,7 @@ testenv = TestFileEnvironment(
 projenv = None
 
 def _get_script_name(script):
-    if sys.platform == 'win32':
+    if sys.platform == 'win32' and not script.lower().endswith('.exe'):
         script += '.exe'
     return script
 
@@ -91,6 +91,8 @@ def paster_create(template_engine='mako', overwrite=False, sqlatesting=False):
     projenv.environ['PYTHONPATH'] = (
         projenv.environ.get('PYTHONPATH', '') + ':'
         + projenv.base_path)
+    
+    projenv.writefile('.coveragerc', frompath='coveragerc')
 
 def make_controller():
     res = projenv.run(_get_script_name('paster')+' controller sample')
@@ -252,15 +254,6 @@ def do_xmlrpc():
     ]
     _do_proj_test(copydict, empty)
 
-def do_legacy_app():
-    legacyenv = TestFileEnvironment(
-        os.path.join(testenv.base_path, 'legacyapp').replace('\\','/'),
-        start_clear=False,
-        template_path=template_path,
-        environ=test_environ)
-    res = legacyenv.run(_get_script_name('nosetests')+' legacyapp/tests',
-                      expect_stderr=True,
-                      cwd=os.path.join(testenv.cwd, 'legacyapp').replace('\\','/'))
 
 def make_tag():
     global tagenv
@@ -361,9 +354,6 @@ def test_project_do_jinja2():
 def test_project_do_xmlrpc():
     do_xmlrpc()
 
-#def test_project_do_legacy_app():
-#    do_legacy_app()
-
 #def test_project_make_tag():
 #    make_tag()
 def test_project_do_sqlaproject():
@@ -374,5 +364,12 @@ def test_project_do_sqlaproject():
 
 def teardown():
     dir_to_clean = os.path.join(os.path.dirname(__file__), TEST_OUTPUT_DIRNAME)
-    rmtree(dir_to_clean)
-
+    cov_dir = os.path.join(dir_to_clean, 'ProjectName')
+    main_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    
+    # Scan and move the coverage files
+    for name in os.listdir(cov_dir):
+        if name.startswith('.coverage.'):
+            shutil.move(os.path.join(cov_dir, name), main_dir)
+        
+    shutil.rmtree(dir_to_clean)
